@@ -13,6 +13,15 @@
 ;; This package provides a minor mode to interact with the clockodo api
 ;; with simple commands.
 
+;; At the moment, the minor mode provides only basic
+;; api interaction from an employer perspective.
+;; This means no higher adjustments or access to priviliged
+;; spaces is provided.
+
+;; There are two main components. First a set of functions
+;; to query the api and secondly an integration of the timer functionality
+;; which can be shown in the modebar.
+
 ;;;; Installation
 
 ;;;;; MELPA
@@ -29,12 +38,16 @@
 
 ;;;; Usage
 
-;; Run (global-clockodo-mode) to keep the mode active across buffers.
+;; To only query the api run `clockodo--initialize' and the call one of:
+;; + `clockodo-show-informations' - Perform a get request against the clockodo api
 
-;; Run one of these commands:
+;; Check the api part about possible return objects[2].
 
-;; `clockodo-start-clock': Start the default clockodo timer.
+;; To integrate the clockodo-timer run `clockodo-mode'.
+;; This creates a background timer which prints to the modeline.
 
+;; Afterwards, run one of these commands:
+;; + `clockodo-start-clock': Start the default clockodo timer.
 
 ;;;; Tips
 
@@ -43,12 +56,10 @@
 ;;;; Credits
 
 ;; This package would not have been possible without the following
-;; packages: foo[1], which showed me how to bifurcate, and bar[2],
-;; which takes care of flanges.
+;; packages: request.el[1]
 ;;
-;;  [1] https://example.com/foo.el
-;;  [2] https://example.com/bar.el
-
+;;  [1] https://github.com/tkf/emacs-request/tree/master/tests
+;;  [2] https://www.clockodo.com/de/api
 
 ;;; Code:
 
@@ -68,14 +79,14 @@ Use %s to mark the end of the url."
   :type 'string
   :group 'clockodo)
 
-(defcustom clockodo-store-api-credential t
-  "Whether to store the api credentials or not."
-  :type 'boolean
-  :group 'clockodo)
-
 (defcustom clockodo-keymap-prefix "C-c C-#"
   "The prefix for the clockodo mode key bindings."
   :type 'string
+  :group 'clockodo)
+
+(defcustom clockodo-mode-line-pair '("☞" . "☜")
+  "The characters used to identify the clockodo part in modeline."
+  :type 'list
   :group 'clockodo)
 
 (defvar clockodo-user-id nil
@@ -83,6 +94,9 @@ Use %s to mark the end of the url."
 
 (defvar clockodo-default-service-id nil
   "The service id defined by the company.")
+
+(defvar clockodo-timer nil
+  "The timer object which interacts with the clockodo api `/v2/clock'.")
 
 (defun clockodo--key (key)
   "Convert a key into a prefixed one.
@@ -99,15 +113,20 @@ KEY The key which should be prefixed."
   :global t
   :keymap (list (cons (clockodo--key "s") #'clockodo-start-clock))
 
+  (setq clockodo-timer nil)
+  (setq clockodo-display-string (format "%sclock%s" (car clockodo-mode-line-pair) (cdr clockodo-mode-line-pair)))
+  (or global-mode-string (setq global-mode-string '("")))
   (if clockodo-mode
       (progn
-        (message "clockodo mode enabled")
+        (message "Enable clockodo mode")
         (clockodo--initialize)
-        (clockodo--toggle-mode-line))
+	      (or (memq 'clockodo-display-string global-mode-string)
+	          (setq global-mode-string
+		              (append global-mode-string '(clockodo-display-string)))))
     (progn
-      (message "clockodo mode disabled")
-      (setq global-mode-string '("")))))
-
+      (message "Disable clockodo mode")
+      (setq clockodo-display-string ""))))
+  
 ;; Handle credentials
 (defun clockodo--get-credentials ()
   "Return the stored api credentials for clockodo.
@@ -154,7 +173,12 @@ TOKEN The token used to authenticate the request."
         ("X-Clockodo-External-Application" . ,(concat "clockodo-el;" user))))
 
 (defun clockodo--get-request(user token url-part)
-  "This function abstracts a simple get requet to the clockodo api."
+  "This function abstracts a simple get requet to the clockodo api.
+
+The result is a parsed json object.
+USER The username used for the api request.
+TOKEN The clockodo api token for the user.
+URL-PART The full api part for the get request."
   (let ((request-header (clockodo--create-header user token)))
     (request (concat clockodo-api-url url-part)
       :sync t
@@ -166,38 +190,38 @@ TOKEN The token used to authenticate the request."
 (defun clockodo--get-all-services (user token)
   "Request the list of services defined within the company.
 
-USER The username from clockodo.
-TOKEN The clockodo api token."
+USER The username used for the api request.
+TOKEN The clockodo api token for the user."
   (clockodo--get-request user token "/services"))
 
 (defun clockodo--get-user-services (user token)
   "Request the access rights for user.
 
-USER The username from clockodo.
-TOKEN The clockodo api token."
+USER The username used for the api request.
+TOKEN The clockodo api token for the user."
   (clockodo--get-request user token
                          (format "/v2/users/%s/access/services" clockodo-user-id)))
 
 (defun clockodo--get-user (user token)
   "Request the map of user settings defined within clockodo.
 
-USER The username from clockodo.
-TOKEN The clockodo api token."
+USER The username used for the api request.
+TOKEN The clockodo api token for the user."
   (clockodo--get-request user token "/v2/aggregates/users/me"))
 
 (defun clockodo--get-customer-projects (user token)
-  "Request the list of customer projects and the defined access rights for the user.
+  "Request the customer projects and the defined access rights for the user.
 
-USER The username from clockodo.
-TOKEN The clockodo api token."
+USER The username used for the api request.
+TOKEN The clockodo api token for the user."
   (clockodo--get-request user token
                          (format "/v2/users/%s/access/customers-projects" clockodo-user-id)))
 
 (defun clockodo--get-users-reports (user token &optional year type all)
   "Request a time report for the user.
 
-USER The username from clockodo.
-TOKEN The clockodo api token.
+USER The username used for the api request.
+TOKEN The clockodo api token for the user.
 &YEAR The report year (default current-year)
 &TYPE One of:
       - 0 Only numbers to the current year (default).
@@ -222,11 +246,14 @@ TOKEN The clockodo api token.
                         request-type))))
     (clockodo--get-request user token url)))
 
-(defun clockodo--get-non-business-days (user token &optional group_id year)
-  "Request the map of user settings defined within clockodo.
+(defun clockodo--get-non-business-days (user token &optional group-id year)
+  "Request a list buisness groups or days which are free.
 
 USER The username from clockodo.
-TOKEN The clockodo api token."
+TOKEN The clockodo api token.
+&GROUP-ID If the group id is provided a list of free days for a year
+          (default: the current year) is returned.
+&YEAR Specify the year you want the free days for."
   (let* ((request-year (if (null year)
                           (nth 5 (decode-time))
                          year)))
@@ -234,29 +261,33 @@ TOKEN The clockodo api token."
         (clockodo--get-request user token "/nonbusinessgroups")
       (clockodo--get-request user token
                              (format "/nonbusinessdays?nonbusinessgroups_id=%s&year=%s"
-                                     group_id request-year)))))
+                                     group-id request-year)))))
 
 (defun clockodo--get-lumpsum-services (user token)
-  "Request the map of user settings defined within clockodo.
+  "Request the list of lumpsum services which are defined in clockodo.
 
-USER The username from clockodo.
-TOKEN The clockodo api token."
+USER The username used for the api request.
+TOKEN The clockodo api token for the user."
   (clockodo--get-request user token "/lumpsumservices"))
 
 (defun clockodo--get-customers (user token &optional customer-id)
-  "Request the map of user settings defined within clockodo.
+  "Request the list of customers or an individual one.
 
-USER The username from clockodo.
-TOKEN The clockodo api token."
+USER The username used for the api request.
+TOKEN The clockodo api token for the user.
+&CUSTOMER-ID This the informations about a single customer instead of all."
   (if (null customer-id)
       (clockodo--get-request user token "/customers")
     (clockodo--get-request user token (format "/customers/%s" customer-id))))
 
 (defun clockodo--get-abscence (user token &optional year all abscence-id)
-  "Request the map of user settings defined within clockodo.
+  "Request a list of all abscence entries or a detailed one.
 
-USER The username from clockodo.
-TOKEN The clockodo api token."
+USER The username used for the api request.
+TOKEN The clockodo api token for the user.
+&YEAR The year which the abscence list should be created.
+&ALL Whether to list all abscences or just for the current user.
+&ABSCENCE-ID Show the informations about a single abscence entry."
   (let* ((request-year (if (null year)
                           (nth 5 (decode-time))
                         year))
@@ -269,7 +300,9 @@ TOKEN The clockodo api token."
 
 
 (defun clockodo--initialize ()
-  "A thin wrapper which set the user id for the next requests."
+  "A thin wrapper which save the api credentails and check the api access.
+
+It sets the `clockodo-user-id' and `clockodo-default-service-id' for the next requests."
   (let* ((creds (clockodo-get-credentials))
         (response (request-response-data
                    (clockodo--get-user (nth 0 creds) (nth 1 creds)))))
@@ -281,17 +314,6 @@ TOKEN The clockodo api token."
           (assoc-default 'default_services_id
                          (assoc-default 'company
                                         response)))))
-
-(defun clockodo--toggle-mode-line ()
-  ""
-  (setq clockodo-display-string "C[X]")
-  (or global-mode-string (setq global-mode-string '("")))
-  ;; setup the clockodo mode-line
-  (when clockodo-mode
-          (progn
-	          (or (memq 'clockodo-display-string global-mode-string)
-	              (setq global-mode-string
-		                  (append global-mode-string '(clockodo-display-string)))))))
 
 (defun clockodo--show-informations (api-part &optional name)
   "A thin wrapper to show json information raw but pretty printed.
@@ -321,18 +343,11 @@ API-PART The api request which to show prettyfied.
           (user-selection (completing-read "Select an api call: " api-calls)))
      (clockodo--show-informations user-selection)))
 
+;; test function
 (let* ((creds (clockodo-get-credentials))
       (api-req 'clockodo--get-service-rights))
   (clockodo--get-non-business-days (nth 0 creds) (nth 1 creds)))
 
-
-
-
-;; (let ((creds (clockode-get-and-update-credentials))
-;;       (response (clockodo--get-user (nth 0 creds) (nth 1 creds))))
-;;   (message (request-response-data response))
-;;   (message (request-response-status-code response))
-;;   )
 
 (provide 'clockodo)
 ;;; clockodo.el ends here
