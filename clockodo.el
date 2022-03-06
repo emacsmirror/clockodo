@@ -315,22 +315,60 @@ It sets the `clockodo-user-id' and `clockodo-default-service-id' for the next re
                          (assoc-default 'company
                                         response)))))
 
-(defun clockodo--show-informations (api-part &optional name)
+(defun clockodo--table-line (key pair)
+  ""
+  (format "| %s | %s | %s |" key (car pair) (cdr pair)))
+
+(defun clockodo--table-convert-array (key vec)
+  ""
+  (cl-loop for entry in vec concat
+           (clockodo--table-line key entry)))
+
+(defun clockodo--table-convert-object (tab)
+  ""
+  (let ((key (car tab)))
+    (concat (format "*%s*\n" key)
+            (clockodo--table-convert-array key (cdr tab))
+            "\n")))
+
+(defun clockodo--convert-table (call data)
+  "This prints an api requests as a table.
+
+CALL The api call which gets parsed.
+DATA The json response converted into the table."
+  (concat (format "Request %s\n\n" call)
+
+  (cl-loop for object in data concat ; (object data)
+    (clockodo--table-convert-object object))))
+
+  ;; (dolist (object data)
+  ;;   (let (key (car object))
+  ;;     (print (format "| %s |" (car object)))
+  ;;     (cl-loop for entry in (cdr object) collect
+  ;;       (print (format "| %s |" entry)))
+  ;;     (message "length %s" (length (cdr object))))))
+
+(defun clockodo--show-informations (api-part &optional name raw)
   "A thin wrapper to show json information raw but pretty printed.
 
 API-PART The api request which to show prettyfied.
-&NAME Optional the name of the temp buffer."
+&NAME Optional the name of the temp buffer.
+&RAW Optional flag to print raw response data."
   (with-output-to-temp-buffer (if (null name)
                                   "*clockodo*"
                                 name)
     (let* ((credentials (clockodo-get-credentials))
-          (response (funcall  (intern api-part) (nth 0 credentials) (nth 1 credentials))))
-      (print (pp-to-string (request-response-data response))))
-    t))
+           (response (funcall (intern api-part) (nth 0 credentials) (nth 1 credentials)))
+           (data (request-response-data response)))
+      (if raw
+          (print (pp-to-string data))
+        (princ (clockodo--convert-table api-part data))))))
 
-(defun clockodo-show-informations ()
-  "This function let a user choose a api-call which json result is shown."
-  (interactive)
+(defun clockodo-show-informations (prefix)
+  "This function let a user choose a api-call which json result is shown.
+
+PREFIX The user prefix keys."
+  (interactive "P")
   (let* ((api-calls '(clockodo--get-all-services
                       clockodo--get-user-services
                       clockodo--get-user
@@ -340,8 +378,8 @@ API-PART The api request which to show prettyfied.
                       clockodo--get-lumpsum-services
                       clockodo--get-customers
                       clockodo--get-abscence))
-          (user-selection (completing-read "Select an api call: " api-calls)))
-     (clockodo--show-informations user-selection)))
+         (user-selection (completing-read "Select an api call: " api-calls)))
+    (clockodo--show-informations user-selection nil (when prefix t))))
 
 ;; test function
 (let* ((creds (clockodo-get-credentials))
