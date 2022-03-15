@@ -341,13 +341,6 @@ DATA The json response converted into the table."
   (cl-loop for object in data concat ; (object data)
     (clockodo--table-convert-object object))))
 
-  ;; (dolist (object data)
-  ;;   (let (key (car object))
-  ;;     (print (format "| %s |" (car object)))
-  ;;     (cl-loop for entry in (cdr object) collect
-  ;;       (print (format "| %s |" entry)))
-  ;;     (message "length %s" (length (cdr object))))))
-
 (defun clockodo--show-informations (api-part &optional name raw)
   "A thin wrapper to show json information raw but pretty printed.
 
