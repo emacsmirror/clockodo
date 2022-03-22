@@ -89,6 +89,11 @@ Use %s to mark the end of the url."
   :type 'list
   :group 'clockodo)
 
+(defcustom clockodo-store-api-credential t
+  "Whether to store the api credentails or not."
+  :type 'boolean
+  :group 'clockodo)
+
 (defvar clockodo-user-id nil
   "The user id needed for most requests.")
 
@@ -257,7 +262,7 @@ TOKEN The clockodo api token.
   (let* ((request-year (if (null year)
                           (nth 5 (decode-time))
                          year)))
-    (if (null group_id)
+    (if (null group-id)
         (clockodo--get-request user token "/nonbusinessgroups")
       (clockodo--get-request user token
                              (format "/nonbusinessdays?nonbusinessgroups_id=%s&year=%s"
@@ -315,20 +320,43 @@ It sets the `clockodo-user-id' and `clockodo-default-service-id' for the next re
                          (assoc-default 'company
                                         response)))))
 
-(defun clockodo--table-line (key pair)
-  ""
-  (format "| %s | %s | %s |" key (car pair) (cdr pair)))
+(defun clockodo--table-line (pair &optional key)
+  "Convert a pair into a table line or subcall if the pair value is alist.
 
-(defun clockodo--table-convert-array (key vec)
-  ""
-  (cl-loop for entry in vec concat
-           (clockodo--table-line key entry)))
+PAIR The pair which is inserted in the table line.
+&KEY The prefix key used for the table line."
+  (let ((subkey (car pair))
+        (val (cdr pair)))
+    (if (listp val)
+        (clockodo--table-convert-alist val subkey)
+      (format "| %s | %s | %s |\n" key subkey val))))
+
+(defun clockodo--table-convert-alist (alist &optional key)
+  "Convert a alist into a table chunk.
+
+ALIST The alist which gets converted.
+&KEY The prefix key for the table."
+  (mapconcat (lambda (x) (clockodo--table-line x key)) alist ""))
+
+(defun clockodo--table-convert-vec (vec &optional key)
+  "Convert a vector into a table chunk.
+
+VEC The vector which gets converted.
+&KEY The prefix key for the table."
+  (mapconcat (lambda (x) (clockodo--table-convert-alist x key)) vec ""))
 
 (defun clockodo--table-convert-object (tab)
-  ""
-  (let ((key (car tab)))
+  "Convert a json object into a table.
+
+TAB The json data which gets converted into a plain table."
+  (let ((key (car tab))
+         (val (cdr tab)))
     (concat (format "*%s*\n" key)
-            (clockodo--table-convert-array key (cdr tab))
+            (if (or (listp val) (vectorp val))
+                (if (vectorp val)
+                    (clockodo--table-convert-vec val key)
+                  (clockodo--table-convert-alist val key))
+              (format "| %s | %s |\n" key val))
             "\n")))
 
 (defun clockodo--convert-table (call data)
@@ -337,9 +365,8 @@ It sets the `clockodo-user-id' and `clockodo-default-service-id' for the next re
 CALL The api call which gets parsed.
 DATA The json response converted into the table."
   (concat (format "Request %s\n\n" call)
-
-  (cl-loop for object in data concat ; (object data)
-    (clockodo--table-convert-object object))))
+          (cl-loop for object in data concat
+                   (clockodo--table-convert-object object))))
 
 (defun clockodo--show-informations (api-part &optional name raw)
   "A thin wrapper to show json information raw but pretty printed.
@@ -372,13 +399,14 @@ PREFIX The user prefix keys."
                       clockodo--get-customers
                       clockodo--get-abscence))
          (user-selection (completing-read "Select an api call: " api-calls)))
+    (when (null clockodo-user-id)
+                (clockodo--initialize))
     (clockodo--show-informations user-selection nil (when prefix t))))
 
 ;; test function
 (let* ((creds (clockodo-get-credentials))
       (api-req 'clockodo--get-service-rights))
   (clockodo--get-non-business-days (nth 0 creds) (nth 1 creds)))
-
 
 (provide 'clockodo)
 ;;; clockodo.el ends here
