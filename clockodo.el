@@ -31,7 +31,9 @@
 ;;;;; Manual
 
 ;; Install the packages:
-;; + apiwrapper
+;; + request
+;; + s
+;; + ts
 
 ;; Then put this file into your load-path and put this into your init file:
 ;; (require 'package-name)
@@ -66,6 +68,8 @@
 (require 'cl-lib)
 (require 'auth-source)
 (require 'request)
+(require 's)
+(require 'ts)
 
 ;; Provide customizations
 (defgroup clockodo nil
@@ -94,11 +98,39 @@ Use %s to mark the end of the url."
   :type 'boolean
   :group 'clockodo)
 
+(defcustom clockodo-minus-color "indian red"
+  "The color used for negative hours."
+  :type 'color
+  :group 'clockodo)
+
+(defcustom clockodo-plus-color "light green"
+  "The color for positive hours."
+  :type 'color
+  :group'clockodo)
+
+(defcustom clockodo-headline-background "dodger blue"
+  "The color for the report headline background."
+  :type 'color
+  :group 'clockodo)
+
+(defcustom clockodo-break-color "light blue"
+  "The color used for break times."
+  :type 'color
+  :group 'clockodo)
+
+(defcustom clockodo-max-work-hours 8
+  "The maximum hours of work used for each day."
+  :type 'number
+  :group 'clockodo)
+
+(defvar clockodo-debug t
+  "Shows more informations in the message buffer.")
+
 (defvar clockodo-user-id nil
   "The user id needed for most requests.")
 
 (defvar clockodo-default-service-id nil
-  "The service id defined by the company.")
+  "The default service id defined by the company.")
 
 (defvar clockodo-timer nil
   "The timer object which interacts with the clockodo api `/v2/clock'.")
@@ -108,6 +140,13 @@ Use %s to mark the end of the url."
 
 KEY The key which should be prefixed."
   (kbd (concat clockodo-keymap-prefix " " key)))
+
+(defun clockodo--with-face (str &rest face-plist)
+  "Enclose a string with a face list.
+
+STR The string which gets a face.
+FACE-PLIST The list of faces."
+  (propertize str 'face face-plist))
 
 ;;;###autoload
 (define-minor-mode clockodo-mode
@@ -153,6 +192,22 @@ The user is asked for credentials if none exists for the api url."
               (plist-get api-creds :save-function))
       nil)))
 
+(defun clockodo--initialize (api-creds)
+  "A thin wrapper which set user variables for the next requests.
+
+API-CREDS The credentials for the clockodo api."
+  (when (or (null clockodo-user-id) (null clockodo-default-service-id))
+    (let* ((response (request-response-data
+                      (clockodo--get-user (nth 0 api-creds) (nth 1 api-creds)))))
+      (setq clockodo-user-id
+            (assoc-default 'id
+                           (assoc-default 'user
+                                          response))
+            clockodo-default-service-id
+            (assoc-default 'default_services_id
+                           (assoc-default 'company
+                                          response))))))
+
 (defun clockodo-get-credentials ()
   "A small wrapper which takes long-time storing of credentials into account.
 
@@ -166,7 +221,18 @@ It knocks the clockodo api to test if the credentials are valid before storing t
                              (nth 1 api-credentials)))))
           (when (eq return-code 200)
             (funcall (nth 2 api-credentials))))))
+    (clockodo--initialize api-credentials)
     api-credentials))
+
+(defun clockodo--get-time-range (time &optional week month)
+  "Convert a point in time to a time range.
+
+TIME The point in time to generate the time range.
+&WEEK Set to t to get a range for the week surrounding the point in time.
+&MONTH Set to t to get a range for the month surrounding the point in time."
+  (let ((start (concat (ts-format "%FT" time) "00:00:00Z"))
+        (end (concat (ts-format "%FT" time) "23:59:59Z")))
+    (cons start end)))
 
 (defun clockodo--create-header (user token)
   "This create the header for requests against the clockodo api.
@@ -184,6 +250,8 @@ The result is a parsed json object.
 USER The username used for the api request.
 TOKEN The clockodo api token for the user.
 URL-PART The full api part for the get request."
+  (when clockodo-debug
+    (message (concat "API-URL: " clockodo-api-url url-part)))
   (let ((request-header (clockodo--create-header user token)))
     (request (concat clockodo-api-url url-part)
       :sync t
@@ -222,6 +290,33 @@ TOKEN The clockodo api token for the user."
   (clockodo--get-request user token
                          (format "/v2/users/%s/access/customers-projects" clockodo-user-id)))
 
+(defun clockodo--get-entries (user token &optional user-id start-time end-time less-text)
+  "Request time entries from clockodo.
+
+The default is that the current day is requested and the entries are limited
+to the current users.
+
+USER The username used for the api request.
+TOKEN The clockodo api token for the user.
+&USER-ID Limit the result to the specific user.
+         If nothing is provided the current user is taken.
+         Provide t to get all entries regardless of the user.
+&START-TIME The time in ISO 8601 UTC, default start of today.
+&END-TIME The time in ISO 8601 UTC, default the current time.
+&LESS-TEXT Set to t to get only the basic information."
+  (let* ((time-range (clockodo--get-time-range (ts-now)))
+         (time-str (format "time_since=%s&time_until=%s"
+                           (or start-time (car time-range))
+                           (or end-time (cdr time-range))))
+         (user-str (format "&users_id=%s" (or user-id clockodo-user-id))))
+  (clockodo--get-request user token
+                         (concat
+                          (format "/v2/entries?%s" time-str)
+                          (unless less-text
+                            "&enhanced_list=true")
+                          (when (or (symbolp user-id) (not user-id))
+                            user-str)))))
+
 (defun clockodo--get-users-reports (user token &optional year type all)
   "Request a time report for the user.
 
@@ -235,12 +330,8 @@ TOKEN The clockodo api token for the user.
       - 3 Print also additional informations about days.
       - 4 Print everything
 &ALL if set to true request all reports the user has access to."
-  (let* ((request-year (if (null year)
-                          (nth 5 (decode-time))
-                        year))
-        (request-type (if (null type)
-                         0
-                        type))
+  (let* ((request-year (or year (nth 5 (decode-time))))
+        (request-type (or type 0))
         (url (if (null all)
                  (format "/userreports/%s?year=%s&type=%s"
                          clockodo-user-id
@@ -259,9 +350,7 @@ TOKEN The clockodo api token.
 &GROUP-ID If the group id is provided a list of free days for a year
           (default: the current year) is returned.
 &YEAR Specify the year you want the free days for."
-  (let* ((request-year (if (null year)
-                          (nth 5 (decode-time))
-                         year)))
+  (let* ((request-year (or year (nth 5 (decode-time)))))
     (if (null group-id)
         (clockodo--get-request user token "/nonbusinessgroups")
       (clockodo--get-request user token
@@ -293,32 +382,13 @@ TOKEN The clockodo api token for the user.
 &YEAR The year which the abscence list should be created.
 &ALL Whether to list all abscences or just for the current user.
 &ABSCENCE-ID Show the informations about a single abscence entry."
-  (let* ((request-year (if (null year)
-                          (nth 5 (decode-time))
-                        year))
+  (let* ((request-year (or year (nth 5 (decode-time))))
         (url (if (null all)
                  (format "/absences?year=%s" request-year)
                (format "/absences?year=%s&user_id=%s" request-year clockodo-user-id))))
     (if (null abscence-id)
         (clockodo--get-request user token url)
       (clockodo--get-request user token (format "/abscences/%s" abscence-id)))))
-
-
-(defun clockodo--initialize ()
-  "A thin wrapper which save the api credentails and check the api access.
-
-It sets the `clockodo-user-id' and `clockodo-default-service-id' for the next requests."
-  (let* ((creds (clockodo-get-credentials))
-        (response (request-response-data
-                   (clockodo--get-user (nth 0 creds) (nth 1 creds)))))
-    (setq clockodo-user-id
-          (assoc-default 'id
-                         (assoc-default 'user
-                                        response))
-          clockodo-default-service-id
-          (assoc-default 'default_services_id
-                         (assoc-default 'company
-                                        response)))))
 
 (defun clockodo--table-line (pair &optional key)
   "Convert a pair into a table line or subcall if the pair value is alist.
@@ -387,7 +457,8 @@ API-PART The api request which to show prettyfied.
 (defun clockodo-show-informations (prefix)
   "This function let a user choose a api-call which json result is shown.
 
-PREFIX The user prefix keys."
+PREFIX The prefix keys used to modify the calls.
+       - \\[universal-argument] -> show raw results"
   (interactive "P")
   (let* ((api-calls '(clockodo--get-all-services
                       clockodo--get-user-services
@@ -397,16 +468,165 @@ PREFIX The user prefix keys."
                       clockodo--get-non-business-days
                       clockodo--get-lumpsum-services
                       clockodo--get-customers
+                      clockodo--get-entries
                       clockodo--get-abscence))
          (user-selection (completing-read "Select an api call: " api-calls)))
-    (when (null clockodo-user-id)
-                (clockodo--initialize))
+    (or clockodo-user-id
+       (clockodo--initialize))
     (clockodo--show-informations user-selection nil (when prefix t))))
 
+(defun clockodo--convert-second (secs)
+  "Convert seconds the a readable hours and minutes format.
+
+SECS The soconds to convert into HH:mm:ss"
+  (let* ((hours (/ secs 3600))
+         (minutes (/ (% secs 3600) 60))
+         (seconds (% secs 60)))
+    (format "%s%s%s"
+            (if (> hours 0)
+                (format "%02d" hours) "")
+            (if (> minutes 0)
+                (format ":%02d" minutes) "")
+            (if (> seconds 0)
+                (format ":%02d" seconds) ""))))
+
+(defun clockodo--get-report-header (report-name time username pass)
+  "Fetch user informations and generate the report header.
+
+REPORT-NAME The name of the report.
+TIME The formated string used for the report time.
+USERNAME The username used for the request.
+PASS The password used for the request."
+  (let* ((header-line (clockodo--with-face
+                       (format " Clockodo %s Overview - %s "
+                               report-name time)
+                       :background clockodo-headline-background
+                       :weight 'bold
+                       :width 'semi-expanded))
+        (response (clockodo--get-users-reports username pass)))
+    (let-alist (request-response-data response)
+      (cons header-line
+            (concat
+             (clockodo--with-face
+              (concat
+               (format "\nName: %s (%s)\n" .userreport.users_name .userreport.users_id)
+               (format "E-mail: %s\n" .userreport.users_email)
+               (format "Vacation days: %s from %s\n"
+                       .userreport.sum_absence.regular_holidays
+                       (+ .userreport.holidays_quota .userreport.holidays_carry))
+               (format "Sick days: %s\n"
+                       (+ .userreport.sum_absence.sick_self .userreport.sum_absence.sick_child))
+               (format "Hour account: %s from %s -> "
+                       (clockodo--convert-second .userreport.sum_hours)
+                       (clockodo--convert-second .userreport.sum_target)))
+               :weight 'light)
+             (clockodo--with-face
+              (clockodo--convert-second (abs .userreport.diff))
+              :foreground
+              (if (> .userreport.diff 0)
+                  clockodo-plus-color
+                clockodo-minus-color))
+             "\n")))))
+
+(defun clockodo--build-report-buffer (name header body &rest args)
+  "Generate a new report buffer and insert the return of body.
+
+NAME The name of the report buffer.
+HEADER A two element list with a header-line and a page heading.
+BODY A function that fills the buffer.
+ARGS The arguments for the body function."
+  (let* ((buffer (get-buffer-create (format "*clockodo-%s*" name)))
+         (inhibit-read-only t))
+    (if (get-buffer-window buffer)
+        (pop-to-buffer-same-window buffer)
+      (switch-to-buffer-other-window buffer))
+    (with-current-buffer buffer
+      (erase-buffer)
+      (special-mode)
+      (setq header-line-format (car header))
+      (insert (cdr header))
+      (apply body args))))
+
+(defun clockodo--format-daily-entries (entries)
+  "Generate the entries for the daily report.
+
+ENTRIES A alist of time entries."
+  (setq-local sum-time 0)
+  (concat
+   (cl-loop for entry across entries concat
+            (let-alist entry
+              (let ((start (ts-parse .time_insert))
+                    (duration (if (null .duration)
+                                  (ts-difference (ts-now) (ts-parse .time_insert))
+                                .duration)))
+                (setq-local
+                 sum-time (+ sum-time (string-to-number (format "%s" duration))))
+                (concat
+                 (clockodo--with-face
+                  (ts-format "%T" start)
+                  :underline t) "\n"
+                 (clockodo--with-face
+                  (concat (ts-human-format-duration duration)
+                          (format "\n(%s)" .services_name) "\n")
+                  :foreground clockodo-plus-color)
+                 (clockodo--with-face
+                  (if (null .time_until)
+                      "Running"
+                    (ts-format "%T" (ts-parse .time_until)))
+                  :underline t) "\n\n"))))
+   (format "Summery: %s / %s hours"
+           (ts-human-format-duration sum-time)
+           clockodo-max-work-hours)))
+
+(defun clockodo--print-daily-overview (time)
+  "Print the daily overview sheet.
+
+TIME The day for which the report should be genereated."
+  (let* ((creds (clockodo-get-credentials))
+         (time-range (clockodo--get-time-range time))
+         (response (clockodo--get-entries
+                    (nth 0 creds) (nth 1 creds)
+                    clockodo-user-id
+                    (car time-range) (cdr time-range)))
+         (header (clockodo--get-report-header
+                  "Daily" (ts-format "%F" time) (nth 0 creds) (nth 1 creds)))
+         (data (request-response-data response))
+         (fun #'(lambda (data)
+                  (let-alist data
+                    (progn
+                      (local-set-key
+                       (kbd "p")
+                       #'(lambda () (interactive)
+                          (clockodo--print-daily-overview (ts-dec 'day 1 time))))
+                      (local-set-key
+                       (kbd "n")
+                       #'(lambda () (interactive)
+                          (clockodo--print-daily-overview (ts-inc 'day 1 time))))
+                      (insert (clockodo--with-face
+                               (format "Entries: %s\n" .paging.count_items)
+                               :weight 'light))
+                      (insert (clockodo--with-face
+                               (s-repeat 30 " ")
+                               :underline t) "\n\n")
+                      (if (> .paging.count_items 0)
+                          (insert (clockodo--format-daily-entries .entries))
+                        (insert (clockodo--with-face
+                                 "No time entries today"
+                                 :weight 'semi-bold
+                                 :underline t))))))))
+    (clockodo--build-report-buffer "daily" header fun data)))
+    
+(defun clockodo-print-daily-overview (prefix)
+  "
+PREFIX The prefix keys or arguments to this call.
+       - \\[universal-argument] -> Show short results"
+  (interactive "P")
+  (clockodo--print-daily-overview (ts-now)))
+
 ;; test function
-(let* ((creds (clockodo-get-credentials))
-      (api-req 'clockodo--get-service-rights))
-  (clockodo--get-non-business-days (nth 0 creds) (nth 1 creds)))
+;; (let* ((creds (clockodo-get-credentials))
+;;       (api-req 'clockodo--get-service-rights))
+;;   (clockodo--get-non-business-days (nth 0 creds) (nth 1 creds)))
 
 (provide 'clockodo)
 ;;; clockodo.el ends here
