@@ -70,6 +70,7 @@
 (require 'request)
 (require 's)
 (require 'ts)
+(require 'org)
 
 ;; Provide customizations
 (defgroup clockodo nil
@@ -230,9 +231,19 @@ It knocks the clockodo api to test if the credentials are valid before storing t
 TIME The point in time to generate the time range.
 &WEEK Set to t to get a range for the week surrounding the point in time.
 &MONTH Set to t to get a range for the month surrounding the point in time."
-  (let ((start (concat (ts-format "%FT" time) "00:00:00Z"))
-        (end (concat (ts-format "%FT" time) "23:59:59Z")))
-    (cons start end)))
+  (let* ((beg (if week
+                     (+ 1 (- (ts-dow time)))
+                (if month
+                    (+ 1 (- (ts-dom time)))
+                  0)))
+         (end (if week
+                  (+ 1 (- 7 (ts-dow time)))
+                (if month
+                    (- (ts-dom (ts-adjust 'day (+ 1 (- (ts-dom time))) 'month +1 'day -1 time)) (ts-dom time))
+                  (+ 1 (- (ts-dom time)))
+                  0))))
+    (cons (ts-format "%FT%TZ" (ts-apply :hour 0 :minute 0 :second 0 (ts-adjust 'day beg time)))
+          (ts-format "%FT%TZ" (ts-apply :hour 23 :minute 59 :second 59 (ts-adjust 'day end time))))))
 
 (defun clockodo--create-header (user token)
   "This create the header for requests against the clockodo api.
@@ -336,7 +347,8 @@ TOKEN The clockodo api token for the user.
                  (format "/userreports/%s?year=%s&type=%s"
                          clockodo-user-id
                          request-year
-                         request-type)
+                         request-type
+                         )
                 (format "/userreports?year=%s&type=%s"
                         request-year
                         request-type))))
@@ -471,8 +483,6 @@ PREFIX The prefix keys used to modify the calls.
                       clockodo--get-entries
                       clockodo--get-abscence))
          (user-selection (completing-read "Select an api call: " api-calls)))
-    (or clockodo-user-id
-       (clockodo--initialize))
     (clockodo--show-informations user-selection nil (when prefix t))))
 
 (defun clockodo--convert-second (secs)
@@ -482,13 +492,13 @@ SECS The soconds to convert into HH:mm:ss"
   (let* ((hours (/ secs 3600))
          (minutes (/ (% secs 3600) 60))
          (seconds (% secs 60)))
-    (format "%s%s%s"
+    (format "%s:%s:%s"
             (if (> hours 0)
-                (format "%02d" hours) "")
+                (format "%02d" hours) "00")
             (if (> minutes 0)
-                (format ":%02d" minutes) "")
+                (format "%02d" minutes) "00")
             (if (> seconds 0)
-                (format ":%02d" seconds) ""))))
+                (format "%02d" seconds) "00"))))
 
 (defun clockodo--get-report-header (report-name time username pass)
   "Fetch user informations and generate the report header.
@@ -547,36 +557,46 @@ ARGS The arguments for the body function."
       (insert (cdr header))
       (apply body args))))
 
-(defun clockodo--format-daily-entries (entries)
-  "Generate the entries for the daily report.
+(defun clockodo--daily-entries-as-list (entries &optional abbrev)
+  "Generate a list of preformated daily entries.
 
-ENTRIES A alist of time entries."
-  (setq-local sum-time 0)
-  (concat
-   (cl-loop for entry across entries concat
-            (let-alist entry
-              (let ((start (ts-parse .time_insert))
-                    (duration (if (null .duration)
-                                  (ts-difference (ts-now) (ts-parse .time_insert))
-                                .duration)))
-                (setq-local
-                 sum-time (+ sum-time (string-to-number (format "%s" duration))))
-                (concat
-                 (clockodo--with-face
-                  (ts-format "%T" start)
-                  :underline t) "\n"
-                 (clockodo--with-face
-                  (concat (ts-human-format-duration duration)
-                          (format "\n(%s)" .services_name) "\n")
-                  :foreground clockodo-plus-color)
-                 (clockodo--with-face
-                  (if (null .time_until)
-                      "Running"
-                    (ts-format "%T" (ts-parse .time_until)))
-                  :underline t) "\n\n"))))
-   (format "Summery: %s / %s hours"
-           (ts-human-format-duration sum-time)
-           clockodo-max-work-hours)))
+The format is:
+List (start_time1 duration1 end_time1) (next_entries) sum_time
+
+ENTRIES A alist of time entries.
+ABBREV Show times in short form. If non-nil use short forms."
+  (let ((sum-time (seq-reduce #'(lambda (init entry)
+                                  (let-alist entry
+                                    (+ init (string-to-number
+                                             (format "%s" .duration)))))
+                              entries 0)))
+    (list
+     :entries
+     (seq-map #'(lambda (e)
+                  (let-alist e
+                    (let ((start (ts-format "%T" (ts-parse .time_insert)))
+                          (duration (if (null .duration)
+                                        (ts-difference (ts-now) (ts-parse .time_insert))
+                                      .duration))
+                          (end (if (null .time_until)
+                                   "Running"
+                                 (ts-format "%T" (ts-parse .time_until))))
+                          (service (format "(%s)" .services_name)))
+                      (list
+                       (clockodo--with-face
+                        start
+                        :underline t)
+                       (clockodo--with-face
+                        (ts-human-format-duration duration abbrev)
+                        :foreground clockodo-plus-color)
+                       (clockodo--with-face
+                        service
+                        :foreground clockodo-plus-color)
+                       (clockodo--with-face
+                        end
+                        :underline t)))))
+              entries)
+     :sum sum-time)))
 
 (defun clockodo--print-daily-overview (time)
   "Print the daily overview sheet.
@@ -608,25 +628,186 @@ TIME The day for which the report should be genereated."
                       (insert (clockodo--with-face
                                (s-repeat 30 " ")
                                :underline t) "\n\n")
-                      (if (> .paging.count_items 0)
-                          (insert (clockodo--format-daily-entries .entries))
-                        (insert (clockodo--with-face
-                                 "No time entries today"
-                                 :weight 'semi-bold
-                                 :underline t))))))))
+                      (let ((entries (clockodo--daily-entries-as-list .entries)))
+                        (if (not (null (plist-get entries :entries)))
+                            (progn
+                              (seq-do #'(lambda (e)
+                                          (insert (string-join e "\n") "\n\n"))
+                                      (plist-get entries :entries))
+                              (insert
+                               (format "Summery: %s / %s hours"
+                                       (ts-human-format-duration (plist-get entries :sum))
+                                       clockodo-max-work-hours)))
+                          (insert (clockodo--with-face
+                                   "No time entries today."
+                                   :weight 'semi-bold
+                                   :underline t)))))))))
     (clockodo--build-report-buffer "daily" header fun data)))
-    
-(defun clockodo-print-daily-overview (prefix)
-  "
-PREFIX The prefix keys or arguments to this call.
-       - \\[universal-argument] -> Show short results"
-  (interactive "P")
-  (clockodo--print-daily-overview (ts-now)))
 
-;; test function
-;; (let* ((creds (clockodo-get-credentials))
-;;       (api-req 'clockodo--get-service-rights))
-;;   (clockodo--get-non-business-days (nth 0 creds) (nth 1 creds)))
+(defun clockodo-print-daily-overview (prefix)
+  "Create a report for the day.
+
+PREFIX Use the \\[universal-argument] to select the day."
+  (interactive "P")
+  (let* ((date (when (not (null prefix))
+                 (ts-parse-org (org-read-date))))
+         (real-date (or date (ts-now))))
+    (clockodo--print-daily-overview real-date)))
+
+(defun clockodo--format-weekly-entries (entries start-day)
+  "Generate the entries for the weekly report.
+
+ENTRIES The alist data to format.
+START-DAY The week which gets reported."
+  (let* ((p (point))
+         (days (mapcar
+                #'(lambda (days)
+                    (let ((time (ts-adjust 'day days start-day)))
+                      (plist-put
+                       (clockodo--daily-entries-as-list
+                        (seq-filter
+                         #'(lambda (e)
+                             (let-alist e
+                               (= (ts-dow time)
+                                  (ts-dow (ts-parse .time_insert)))))
+                         entries)
+                        t)
+                       :day (clockodo--with-face
+                             (ts-format "%a %d.%m.%y" time)
+                             :weight 'semi-bold
+                             :background "thistle"
+                             :foreground "black"))))
+                (number-sequence 0 6)))
+         (leng (seq-max (mapcar #'(lambda (e) (length (plist-get e :entries))) days)))
+         (header (seq-map #'(lambda (e) (plist-get e :day)) days))
+         (entries (seq-map #'(lambda (e) (plist-get e :entries)) days))
+         (sums (seq-map
+                #'(lambda (e)
+                    (format "%s / %s hours"
+                            (ts-human-format-duration (plist-get e :sum) t)
+                            clockodo-max-work-hours))
+                days)))
+    
+    (insert (mapconcat #'identity header ",") "\n")
+    (cl-loop for i from 0 to (1- leng) do
+             (cl-loop for j from 0 to 4 do
+                      (insert
+                       (string-remove-suffix ","
+                        (string-join
+                         (seq-map #'(lambda (e) (concat (nth j (nth i e)) ",")) entries) ""))
+                       "\n")))
+    (insert (mapconcat #'identity sums ","))
+    (org-table-convert-region p (point))
+    (goto-char p)
+    (org-table-insert-hline)))
+
+(defun clockodo--print-weekly-overview (time)
+  "Print the weekly overview sheet.
+
+TIME The day for which the report should be genereated."
+  (let* ((creds (clockodo-get-credentials))
+         (time-range (clockodo--get-time-range time t))
+         (response (clockodo--get-entries
+                    (nth 0 creds) (nth 1 creds)
+                    clockodo-user-id
+                    (car time-range) (cdr time-range)))
+         (header (clockodo--get-report-header
+                  "Weekly" (ts-format "%+4Y-%m Week %W" time) (nth 0 creds) (nth 1 creds)))
+         (data (request-response-data response))
+         (fun #'(lambda (data)
+                  (let-alist data
+                    (progn
+                      (local-set-key
+                       (kbd "p")
+                       #'(lambda () (interactive)
+                           (clockodo--print-weekly-overview (ts-adjust 'day -7 time))))
+                      (local-set-key
+                       (kbd "n")
+                       #'(lambda () (interactive)
+                           (clockodo--print-weekly-overview (ts-adjust 'day +7 time))))
+                      (insert (clockodo--with-face
+                               (format "Entries: %s\n" .paging.count_items)
+                               :weight 'light))
+                      (insert (clockodo--with-face
+                               (s-repeat 30 " ")
+                               :underline t)
+                              "\n\n")
+                      (clockodo--format-weekly-entries .entries (ts-parse (car time-range))))))))
+    (clockodo--build-report-buffer "weekly" header fun data)))
+
+(defun clockodo-print-weekly-overview (prefix)
+  "Create a report for the week.
+
+PREFIX Use the \\[universal-argument] to select the week."
+  (interactive "P")
+  (let* ((date (when (not (null prefix))
+                 (ts-parse-org (org-read-date))))
+         (real-date (or date (ts-now))))
+    (clockodo--print-weekly-overview real-date)))
+
+(defun clockodo--print-monthly-overview (time)
+  "Print the weekly overview sheet.
+
+TIME The day for which the report should be genereated."
+  (let* ((creds (clockodo-get-credentials))
+         (time-range (clockodo--get-time-range time nil t))
+         (response (clockodo--get-entries
+                    (nth 0 creds) (nth 1 creds)
+                    clockodo-user-id
+                    (car time-range) (cdr time-range)))
+         (header (clockodo--get-report-header
+                  "Mothly" (ts-format "%+4Y-%m" time) (nth 0 creds) (nth 1 creds)))
+         (data (request-response-data response))
+         (fun #'(lambda (data)
+                  (let-alist data
+                    (progn
+                      (local-set-key
+                       (kbd "p")
+                       #'(lambda () (interactive)
+                          (clockodo--print-monthly-overview (ts-dec 'month 1 time))))
+                      (local-set-key
+                       (kbd "n")
+                       #'(lambda () (interactive)
+                          (clockodo--print-monthly-overview (ts-inc 'month 1 time))))
+                      (insert "monthly" )
+                      (insert (format "\n%s" (clockodo--get-users-reports (nth 0 creds) (nth 1 creds) "2022" 1)) ))))))
+    (clockodo--build-report-buffer "monthly" header fun data)))
+
+(defun clockodo-print-monthly-overview (prefix)
+  "Create a report for the month.
+
+PREFIX Use the \\[universal-argument] to select the month."
+  (interactive "P")
+  (let* ((date (when (not (null prefix))
+                 (ts-parse-org (org-read-date))))
+         (real-date (or date (ts-now))))
+    (clockodo--print-monthly-overview real-date)))
+
+
+(defun clockodo--print-overall-overview (time)
+  "Print the weekly overview sheet.
+
+TIME The day for which the report should be genereated."
+  (let* ((creds (clockodo-get-credentials))
+         (time-range (clockodo--get-time-range time))
+         (response (clockodo--get-entries
+                    (nth 0 creds) (nth 1 creds)
+                    clockodo-user-id
+                    (car time-range) (cdr time-range)))
+         (header (clockodo--get-report-header
+                  "Overall" "" (nth 0 creds) (nth 1 creds)))
+         (data (request-response-data response))
+         (fun #'(lambda (data)
+                  (let-alist data
+                    (progn
+                      (insert "overall" )
+                      )))))
+    (clockodo--build-report-buffer "overall" header fun data)))
+
+(defun clockodo-print-overall-overview ()
+  "Create a long overview report over the complete time."
+  (interactive)
+  )
 
 (provide 'clockodo)
 ;;; clockodo.el ends here
