@@ -347,8 +347,8 @@ TOKEN The clockodo api token for the user.
                  (format "/userreports/%s?year=%s&type=%s"
                          clockodo-user-id
                          request-year
-                         request-type
-                         )
+                         ;request-type
+                         4)
                 (format "/userreports?year=%s&type=%s"
                         request-year
                         request-type))))
@@ -402,76 +402,22 @@ TOKEN The clockodo api token for the user.
         (clockodo--get-request user token url)
       (clockodo--get-request user token (format "/abscences/%s" abscence-id)))))
 
-(defun clockodo--table-line (pair &optional key)
-  "Convert a pair into a table line or subcall if the pair value is alist.
-
-PAIR The pair which is inserted in the table line.
-&KEY The prefix key used for the table line."
-  (let ((subkey (car pair))
-        (val (cdr pair)))
-    (if (listp val)
-        (clockodo--table-convert-alist val subkey)
-      (format "| %s | %s | %s |\n" key subkey val))))
-
-(defun clockodo--table-convert-alist (alist &optional key)
-  "Convert a alist into a table chunk.
-
-ALIST The alist which gets converted.
-&KEY The prefix key for the table."
-  (mapconcat (lambda (x) (clockodo--table-line x key)) alist ""))
-
-(defun clockodo--table-convert-vec (vec &optional key)
-  "Convert a vector into a table chunk.
-
-VEC The vector which gets converted.
-&KEY The prefix key for the table."
-  (mapconcat (lambda (x) (clockodo--table-convert-alist x key)) vec ""))
-
-(defun clockodo--table-convert-object (tab)
-  "Convert a json object into a table.
-
-TAB The json data which gets converted into a plain table."
-  (let ((key (car tab))
-         (val (cdr tab)))
-    (concat (format "*%s*\n" key)
-            (if (or (listp val) (vectorp val))
-                (if (vectorp val)
-                    (clockodo--table-convert-vec val key)
-                  (clockodo--table-convert-alist val key))
-              (format "| %s | %s |\n" key val))
-            "\n")))
-
-(defun clockodo--convert-table (call data)
-  "This prints an api requests as a table.
-
-CALL The api call which gets parsed.
-DATA The json response converted into the table."
-  (concat (format "Request %s\n\n" call)
-          (cl-loop for object in data concat
-                   (clockodo--table-convert-object object))))
-
-(defun clockodo--show-informations (api-part &optional name raw)
+(defun clockodo--show-informations (api-part &optional name)
   "A thin wrapper to show json information raw but pretty printed.
 
 API-PART The api request which to show prettyfied.
-&NAME Optional the name of the temp buffer.
-&RAW Optional flag to print raw response data."
-  (with-output-to-temp-buffer (if (null name)
-                                  "*clockodo*"
-                                name)
+&NAME Optional the name of the temp buffer."
+  (with-output-to-temp-buffer (or  name "*clockodo*")
     (let* ((credentials (clockodo-get-credentials))
            (response (funcall (intern api-part) (nth 0 credentials) (nth 1 credentials)))
            (data (request-response-data response)))
-      (if raw
-          (print (pp-to-string data))
-        (princ (clockodo--convert-table api-part data))))))
+      (princ (format "%s:\n%s"
+                     api-part
+                     (pp-to-string data))))))
 
-(defun clockodo-show-informations (prefix)
-  "This function let a user choose a api-call which json result is shown.
-
-PREFIX The prefix keys used to modify the calls.
-       - \\[universal-argument] -> show raw results"
-  (interactive "P")
+(defun clockodo-show-informations ()
+  "This function let a user choose a api-call which json result is shown."
+  (interactive)
   (let* ((api-calls '(clockodo--get-all-services
                       clockodo--get-user-services
                       clockodo--get-user
@@ -483,7 +429,7 @@ PREFIX The prefix keys used to modify the calls.
                       clockodo--get-entries
                       clockodo--get-abscence))
          (user-selection (completing-read "Select an api call: " api-calls)))
-    (clockodo--show-informations user-selection nil (when prefix t))))
+    (clockodo--show-informations user-selection nil)))
 
 (defun clockodo--convert-second (secs)
   "Convert seconds the a readable hours and minutes format.
