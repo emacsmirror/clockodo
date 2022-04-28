@@ -63,7 +63,7 @@
 ;;;; Tips
 
 ;; + You can customize settings in the `clockodo' group.
-;; + Use `clockodo-show-informations' to see the raw api results.
+;; + Use `clockodo-show-information' to see the raw api results.
 ;; + Use (setq clockodo-debug t) to get the api calls printed to messages.
 
 ;;;; Credits
@@ -147,7 +147,7 @@ Only 7 days and 5 days are supported."
 ;; Mode and API variables
 
 (defvar clockodo-debug t
-  "Shows more informations in the message buffer.")
+  "Shows more information in the message buffer.")
 
 (defvar clockodo-user-id nil
   "The user id needed for most requests.")
@@ -165,6 +165,16 @@ Only 7 days and 5 days are supported."
   "The internal timer object used to update the display-mode.")
 
 ;; General methods used throughout the package
+
+(defun lambda-key (keymap key def)
+  "Wrap`define-key' to provide documentation.
+
+KEYMAP The keymap the key gets bound to
+KEY The key bound for the function
+DEF The anonymous function for the key"
+  (set 'sym (make-symbol (documentation def)))
+  (fset sym def)
+  (define-key keymap key sym))
 
 (defun clockodo--key (key)
   "Convert a key into a prefixed one.
@@ -424,9 +434,9 @@ TOKEN The clockodo api token for the user.
 &YEAR The report year (default current-year)
 &TYPE One of:
       - 0 Only numbers to the current year (default).
-      - 1 Print additional informations about every month.
-      - 2 Print additional informations about month and weeks.
-      - 3 Print also additional informations about days.
+      - 1 Print additional information about every month.
+      - 2 Print additional information about month and weeks.
+      - 3 Print also additional information about days.
       - 4 Print everything
 &ALL if set to true request all reports the user has access to."
   (let* ((request-year (or year (ts-year (ts-now))))
@@ -469,7 +479,7 @@ TOKEN The clockodo api token for the user."
 
 USER The username used for the api request.
 TOKEN The clockodo api token for the user.
-&CUSTOMER-ID This the informations about a single customer instead of all."
+&CUSTOMER-ID This the information about a single customer instead of all."
   (clockodo--get-request user token
                          (concat "/customers"
                                  (unless (null costomer-id)
@@ -482,7 +492,7 @@ USER The username used for the api request.
 TOKEN The clockodo api token for the user.
 &YEAR The year which the abscence list should be created.
 &ALL Whether to list all abscences or just for the current user.
-&ABSCENCE-ID Show the informations about a single abscence entry."
+&ABSCENCE-ID Show the information about a single abscence entry."
   (let* ((request-year (or year (ts-year (ts-now))))
          (url (concat (format "/absences?year=%s" request-year)
                       (unless (null all)
@@ -494,7 +504,7 @@ TOKEN The clockodo api token for the user.
 
 ;; Report functions
 
-(defun clockodo--show-informations (api-part &optional name)
+(defun clockodo--show-information (api-part &optional name)
   "A thin wrapper to show json information raw but pretty printed.
 
 API-PART The api request which to show prettyfied.
@@ -507,7 +517,7 @@ API-PART The api request which to show prettyfied.
                      api-part
                      (pp-to-string data))))))
 
-(defun clockodo-show-informations ()
+(defun clockodo-show-information ()
   "This function let a user choose a api-call which json result is shown."
   (interactive)
   (let* ((api-calls '(clockodo--get-all-services
@@ -522,7 +532,7 @@ API-PART The api request which to show prettyfied.
                       clockodo--get-abscence
                       clockodo--get-clock))
          (user-selection (completing-read "Select an api call: " api-calls)))
-    (clockodo--show-informations user-selection nil)))
+    (clockodo--show-information user-selection nil)))
 
 (defun clockodo--convert-second (secs)
   "Convert seconds the a readable hours and minutes format.
@@ -540,7 +550,7 @@ SECS The soconds to convert into HH:mm:ss"
                 (format "%02d" seconds) "00"))))
 
 (defun clockodo--get-report-header (report-name time username pass)
-  "Fetch user informations and generate the report header.
+  "Fetch user information and generate the report header.
 
 REPORT-NAME The name of the report.
 TIME The formated string used for the report time.
@@ -599,11 +609,16 @@ List (start_time1 duration1 end_time1) (next_entries) sum_time
 
 ENTRIES A alist of time entries.
 ABBREV Show times in short form. If non-nil use short forms."
-  (let ((sum-time (seq-reduce #'(lambda (init entry)
-                                  (let-alist entry
-                                    (+ init (string-to-number
-                                             (format "%s" .duration)))))
-                              entries 0)))
+  (let ((sum-time (seq-reduce
+                   #'(lambda (init entry)
+                       (let-alist entry
+                         (+ init (string-to-number
+                                  (format "%s"
+                                          (or .duration
+                                             (ts-difference
+                                              (ts-now)
+                                              (ts-parse .time_insert))))))))
+                   entries 0)))
     (list
      :entries
      (seq-map #'(lambda (e)
@@ -644,19 +659,26 @@ TIME The day for which the report should be genereated."
          (fun #'(lambda (data)
                   (let-alist data
                     (progn
-                      (local-set-key (kbd "g")
-                                     #'(lambda () (interactive)
-                                         (clockodo--print-daily-overview (ts-now))))
-                      (local-set-key (kbd "p")
-                                     #'(lambda () (interactive)
-                                         (clockodo--print-daily-overview (ts-dec 'day 1 time))))
-                      (local-set-key (kbd "n")
-                                     #'(lambda () (interactive)
+                      (local-set-key (kbd "g") #'clockodo-print-daily-overview)
+                      (lambda-key (current-local-map) (kbd "c")
+                                  #'(lambda ()
+                                    "choose report day"
+                                    (interactive)
+                                    (clockodo-print-daily-overview t)))
+                      (lambda-key (current-local-map) (kbd "p")
+                                  #'(lambda ()
+                                      "previous day"
+                                      (interactive)
+                                      (clockodo--print-daily-overview (ts-dec 'day 1 time))))
+                      (lambda-key (current-local-map) (kbd "n")
+                                  #'(lambda ()
+                                      "next day"
+                                      (interactive)
                                          (clockodo--print-daily-overview (ts-inc 'day 1 time))))
-                      (insert (clockodo--with-face
+                    (insert (clockodo--with-face
                                (format "Entries: %s\n" .paging.count_items)
                                :weight 'light))
-                      (insert (clockodo--with-face
+                    (insert (clockodo--with-face
                                (make-string 30 32)
                                :underline t) "\n\n")
                       (let ((entries (clockodo--daily-entries-as-list .entries)))
@@ -753,15 +775,23 @@ TIME The day for which the report should be genereated."
          (fun #'(lambda (data)
                   (let-alist data
                     (progn
-                      (local-set-key (kbd "g")
-                                     #'(lambda () (interactive)
-                                         (clockodo--print-weekly-overview (ts-now))))
-                      (local-set-key (kbd "p")
-                                     #'(lambda () (interactive)
-                                         (clockodo--print-weekly-overview (ts-adjust 'day -7 time))))
-                      (local-set-key (kbd "n")
-                                     #'(lambda () (interactive)
-                                         (clockodo--print-weekly-overview (ts-adjust 'day +7 time))))
+                      (local-set-key (kbd "g") #'clockodo-print-weekly-overview)
+                      (local-set-key (kbd "c") '(clockodo-print-weekly-overview t))
+                      (lambda-key (current-local-map) (kbd "c")
+                                  #'(lambda ()
+                                      "choose report week"
+                                      (interactive)
+                                      (clockodo-print-weekly-overview t)))
+                      (lambda-key (current-local-map) (kbd "p")
+                                  #'(lambda ()
+                                      "previous week"
+                                      (interactive)
+                                      (clockodo--print-weekly-overview (ts-dec 'day -7 time))))
+                      (lambda-key (current-local-map) (kbd "n")
+                                  #'(lambda ()
+                                      "next week"
+                                      (interactive)
+                                      (clockodo--print-weekly-overview (ts-inc 'day +7 time))))
                       (insert (clockodo--with-face
                                (format "Entries: %s\n" .paging.count_items)
                                :weight 'light))
@@ -798,15 +828,22 @@ TIME The day for which the report should be genereated."
          (fun #'(lambda (data)
                   (let-alist data
                     (progn
-                      (local-set-key (kbd "g")
-                                     #'(lambda () (interactive)
-                                         (clockodo--print-monthly-overview (ts-now))))
-                      (local-set-key (kbd "p")
-                                     #'(lambda () (interactive)
-                                         (clockodo--print-monthly-overview (ts-dec 'month 1 time))))
-                      (local-set-key (kbd "n")
-                                     #'(lambda () (interactive)
-                                         (clockodo--print-monthly-overview (ts-inc 'month 1 time))))
+                      (local-set-key (kbd "g") #'clockodo-print-monthly-overview)
+                      (lambda-key (current-local-map) (kbd "c")
+                                  #'(lambda ()
+                                    "choose report month"
+                                    (interactive)
+                                    (clockodo-print-monthly-overview t)))
+                      (lambda-key (current-local-map) (kbd "p")
+                                  #'(lambda ()
+                                      "previous month"
+                                      (interactive)
+                                      (clockodo--print-monthly-overview (ts-dec 'month 1 time))))
+                      (lambda-key (current-local-map) (kbd "n")
+                                  #'(lambda ()
+                                      "next month"
+                                      (interactive)
+                                      (clockodo--print-monthly-overview (ts-inc 'month 1 time))))
                       (insert "monthly" )
                       (insert (format "\n%s" (clockodo--get-users-reports (nth 0 creds) (nth 1 creds) "2022" 1)) ))))))
     (clockodo--build-report-buffer "monthly" header fun data)))
