@@ -646,7 +646,7 @@ TIME The day for which the report should be genereated."
                     (progn
                       (local-set-key (kbd "g")
                                      #'(lambda () (interactive)
-                                         (clockodo-print-daily-overview (ts-now))))
+                                         (clockodo--print-daily-overview (ts-now))))
                       (local-set-key (kbd "p")
                                      #'(lambda () (interactive)
                                          (clockodo--print-daily-overview (ts-dec 'day 1 time))))
