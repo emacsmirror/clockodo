@@ -11,16 +11,16 @@
 ;;; Commentary:
 
 ;; This package provides a minor mode to interact with the clockodo api
-;; with simple commands.
+;; with simple commands and a simple clock.
 
 ;; At the moment, the minor mode provides only basic
-;; api interaction from an employer perspective.
+;; api interaction from an employee perspective.
 ;; This means no higher adjustments or access to priviliged
 ;; spaces is provided.
 
 ;; There are two main components. First a set of functions
 ;; to query the api and secondly an integration of the timer functionality
-;; which can be shown in the modebar.
+;; which can be shown in the mode-line.
 
 ;;;; Installation
 
@@ -33,7 +33,7 @@
 ;; Install the packages:
 ;; + request
 ;; + ts
-;; + (Optional) org
+;; + org
 
 ;; Then put this file into your load-path and put this into your init file:
 ;; (require 'clockodo)
@@ -54,7 +54,11 @@
 ;; This creates a background timer which prints to the modeline.
 
 ;; Afterwards, run one of these commands:
-;; + `clockodo-start-clock': Start the default clockodo timer.
+;; + `clockodo-toggle-clock': Start the default clockodo timer.
+
+;; The mode-line updater and the clock can be used independently which
+;; means one can enable the clock from another application and just show
+;; the current duration within Emacs.
 
 ;;;; Tips
 
@@ -94,7 +98,7 @@
   :type 'string
   :group 'clockodo)
 
-(defcustom clockodo-mode-line-pair '("☞" . "☜")
+(defcustom clockodo-mode-line-pair '("「" . "」")
   "The characters used to identify the clockodo part in modeline."
   :type 'list
   :group 'clockodo)
@@ -135,7 +139,12 @@ Only 7 days and 5 days are supported."
   :type 'number
   :group 'clockodo)
 
-;; Custom variables
+(defcustom clockodo-update-interval 60
+  "The update interval in seconds used for query the clockodo clock if it is running."
+  :type 'number
+  :group 'clockodo)
+
+;; Mode and API variables
 
 (defvar clockodo-debug t
   "Shows more informations in the message buffer.")
@@ -149,8 +158,11 @@ Only 7 days and 5 days are supported."
 (defvar clockodo-default-customer-id nil
   "The default customer id defined by the company.")
 
+(defvar clockodo-timer-id nil
+  "The timer object id which is used for interaction with the clockodo api `/v2/clock'.")
+
 (defvar clockodo-timer nil
-  "The timer object which interacts with the clockodo api `/v2/clock'.")
+  "The internal timer object used to update the display-mode.")
 
 ;; General methods used throughout the package
 
@@ -292,7 +304,7 @@ URL-PART The full api part for the get request."
 USER The username used for the api request.
 TOKEN The clockodo api token for the user."
   (clockodo--delete-request user token
-                            (format "/v2/clock/%s" clockodo-timer)))
+                            (format "/v2/clock/%s" clockodo-timer-id)))
 
 (defun clockodo--post-request (user token url-part data)
   "This function abstracts a simple post request to the clockodo api.
@@ -632,14 +644,15 @@ TIME The day for which the report should be genereated."
          (fun #'(lambda (data)
                   (let-alist data
                     (progn
-                      (local-set-key
-                       (kbd "p")
-                       #'(lambda () (interactive)
-                          (clockodo--print-daily-overview (ts-dec 'day 1 time))))
-                      (local-set-key
-                       (kbd "n")
-                       #'(lambda () (interactive)
-                          (clockodo--print-daily-overview (ts-inc 'day 1 time))))
+                      (local-set-key (kbd "g")
+                                     #'(lambda () (interactive)
+                                         (clockodo-print-daily-overview (ts-now))))
+                      (local-set-key (kbd "p")
+                                     #'(lambda () (interactive)
+                                         (clockodo--print-daily-overview (ts-dec 'day 1 time))))
+                      (local-set-key (kbd "n")
+                                     #'(lambda () (interactive)
+                                         (clockodo--print-daily-overview (ts-inc 'day 1 time))))
                       (insert (clockodo--with-face
                                (format "Entries: %s\n" .paging.count_items)
                                :weight 'light))
@@ -740,14 +753,15 @@ TIME The day for which the report should be genereated."
          (fun #'(lambda (data)
                   (let-alist data
                     (progn
-                      (local-set-key
-                       (kbd "p")
-                       #'(lambda () (interactive)
-                           (clockodo--print-weekly-overview (ts-adjust 'day -7 time))))
-                      (local-set-key
-                       (kbd "n")
-                       #'(lambda () (interactive)
-                           (clockodo--print-weekly-overview (ts-adjust 'day +7 time))))
+                      (local-set-key (kbd "g")
+                                     #'(lambda () (interactive)
+                                         (clockodo--print-weekly-overview (ts-now))))
+                      (local-set-key (kbd "p")
+                                     #'(lambda () (interactive)
+                                         (clockodo--print-weekly-overview (ts-adjust 'day -7 time))))
+                      (local-set-key (kbd "n")
+                                     #'(lambda () (interactive)
+                                         (clockodo--print-weekly-overview (ts-adjust 'day +7 time))))
                       (insert (clockodo--with-face
                                (format "Entries: %s\n" .paging.count_items)
                                :weight 'light))
@@ -784,14 +798,15 @@ TIME The day for which the report should be genereated."
          (fun #'(lambda (data)
                   (let-alist data
                     (progn
-                      (local-set-key
-                       (kbd "p")
-                       #'(lambda () (interactive)
-                          (clockodo--print-monthly-overview (ts-dec 'month 1 time))))
-                      (local-set-key
-                       (kbd "n")
-                       #'(lambda () (interactive)
-                          (clockodo--print-monthly-overview (ts-inc 'month 1 time))))
+                      (local-set-key (kbd "g")
+                                     #'(lambda () (interactive)
+                                         (clockodo--print-monthly-overview (ts-now))))
+                      (local-set-key (kbd "p")
+                                     #'(lambda () (interactive)
+                                         (clockodo--print-monthly-overview (ts-dec 'month 1 time))))
+                      (local-set-key (kbd "n")
+                                     #'(lambda () (interactive)
+                                         (clockodo--print-monthly-overview (ts-inc 'month 1 time))))
                       (insert "monthly" )
                       (insert (format "\n%s" (clockodo--get-users-reports (nth 0 creds) (nth 1 creds) "2022" 1)) ))))))
     (clockodo--build-report-buffer "monthly" header fun data)))
@@ -832,6 +847,19 @@ TIME The day for which the report should be genereated."
 
 ;;; The clock as minor mode
 
+(defun clockodo-get-clock ()
+  "This requests the current clock state from clockodo.
+
+The function returns nil if the clock is not running or
+the time duration since the clock was started in seconds."
+  (let* ((creds (clockodo--get-credentials))
+         (response (clockodo--get-clock (nth 0 creds) (nth 1 creds)))
+         (data (request-response-data response)))
+    (let-alist data
+      (unless (null .running.id)
+        (ts-human-format-duration
+         (ts-difference (ts-now) (ts-parse .running.time_insert)) t)))))
+
 (defun clockodo-start-clock ()
   "Start the clockodo clock service.
 
@@ -845,10 +873,10 @@ for being able to stop the clock later."
           (let* ((post-resp (clockodo--start-clock (nth 0 creds) (nth 1 creds)))
                  (post-data (request-response-data post-resp)))
             (let-alist post-data
-              (setq clockodo-timer .running.id)
+              (setq clockodo-timer-id .running.id)
               (message (format "Started clock at %s" (ts-format "%T" (ts-parse  .running.time_since))))))
         (progn
-          (setq clockodo-timer .running.id)
+          (setq clockodo-timer-id .running.id)
           (message (format "Clock already started at %s" (ts-format "%T" (ts-parse  .running.time_since)))))))))
 
 (defun clockodo-stop-clock ()
@@ -860,19 +888,20 @@ to nil instead of really stopping the clock."
          (response (clockodo--get-clock (nth 0 creds) (nth 1 creds)))
          (data (request-response-data response)))
     (let-alist data
-      (if (and clockodo-timer (not (null .running.id)))
+      (if (and clockodo-timer-id (not (null .running.id)))
           (let* ((del-resp (clockodo--stop-clock (nth 0 creds) (nth 1 creds)))
                  (del-data (request-response-data del-resp)))
-            (setq clockodo-timer nil)
-            (message (format "Stopped clock at %s" (ts-format "%T" (ts-parse .stopped.time_until)))))
+            (let-alist del-data
+             (setq clockodo-timer-id nil)
+             (message (format "Stopped clock at %s" (ts-format "%T" (ts-parse .stopped.time_until))))))
         (progn
-          (setq clockodo-timer nil)
+          (setq clockodo-timer-id nil)
           (message "Clock already stopped"))))))
 
 (defun clockodo-toggle-clock ()
   "Toggle the state of the clockodo clock service."
   (interactive)
-  (if clockodo-timer
+  (if clockodo-timer-id
       (clockodo-stop-clock)
     (clockodo-start-clock)))
 
@@ -883,22 +912,41 @@ to nil instead of really stopping the clock."
   :lighter " clockodo"
   :group 'clockodo
   :global t
-  :keymap (list (cons (clockodo--key "s") #'clockodo-toggle-clock))
-
-  (setq clockodo-timer nil)
-  (setq clockodo-display-string (format "%sclock%s" (car clockodo-mode-line-pair) (cdr clockodo-mode-line-pair)))
-  (or global-mode-string (setq global-mode-string '("")))
-  (if clockodo-mode
-      (progn
-        (message "Enable clockodo mode")
-        (or (memq 'clockodo-display-string global-mode-string)
-	         (setq global-mode-string
-		             (append global-mode-string '(clockodo-display-string)))))
-    (progn
-      (message "Disable clockodo mode")
-      (unless (null clockodo-timer)
-        (clockodo--stop-clock))
-      (setq clockodo-display-string ""))))
+  :keymap (list (cons (clockodo--key "t") #'clockodo-toggle-clock)
+                (cons (clockodo--key "d") #'clockodo-print-daily-overview)
+                (cons (clockodo--key "w") #'clockodo-print-weekly-overview))
+  ;; Set mode-line mouse bindings
+  (global-set-key [mode-line mouse-2] 'clockodo-toggle-clock)
+  
+  ;; Set the empty mode-line
+  (let ((clock (format "%sclock%s" (car clockodo-mode-line-pair) (cdr clockodo-mode-line-pair))))
+    (setq clockodo-display-string clock)
+    (or global-mode-string (setq global-mode-string '("")))
+   (if clockodo-mode
+       (progn
+         (message "Enable clockodo mode")
+         (or (memq 'clockodo-display-string global-mode-string)
+	          (setq global-mode-string
+		              (append global-mode-string '(clockodo-display-string))))
+         (setq clockodo-timer
+               (run-with-timer 0 clockodo-update-interval
+                            #'(lambda ()
+                                (let ((time (clockodo-get-clock)))
+                                  (if (not (null time))
+                                      (setq clockodo-display-string
+                                            (format "%s%s%s"
+                                                    (car clockodo-mode-line-pair)
+                                                    time
+                                                    (cdr clockodo-mode-line-pair)))
+                                    (setq clockodo-display-string clock)))))))
+     (progn
+       (message "Disable clockodo mode")
+       (unless (null clockodo-timer-id)
+         (clockodo--stop-clock))
+       (unless (null clockodo-timer)
+         (cancel-timer clockodo-timer))
+       (setq clockodo-display-string ""
+             clockodo-timer nil)))))
   
 ;;.duration (ts-difference (ts-now) (ts-parse .time_insert))
 
