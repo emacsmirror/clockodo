@@ -74,4 +74,9 @@ package feel free to give general hints on idiomatic emacs-lisp and style.
 
 ## License
 
-GPLv3 but TODO
+Copyright (c) 2022 Henrik Jürges <ratzeputz@rtzptz.xyz>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.

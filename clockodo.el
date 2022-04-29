@@ -1,12 +1,25 @@
 ;;; clockodo.el --- A small integration for the clockodo api -*- lexical-binding: t -*-
 
-;; Copyright (c) Henrik Jürges
+;; Copyright (c) 2022 Henrik Jürges <ratzeputz@rtzptz.xyz>
+
+;; This program is free software: you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; You should have received a copy of the GNU General Public License
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 ;; Author: Henrik Jürges <juerges.henrik@gmail.com>
+;; URL: https://github.com/santifa/clockodo-el
 ;; Version: 0.7
 ;; Package-Requires: ((emacs "26.1") (request "0.3.2") (ts "0.2.2") (org "8"))
-;; Keywords: tools
-;; URL: https://github.com/santifa/clockodo-el
+;; Keywords: tools, clockodo
 
 ;;; Commentary:
 
@@ -984,8 +997,6 @@ to nil instead of really stopping the clock."
          (cancel-timer clockodo-timer))
        (setq clockodo-display-string ""
              clockodo-timer nil)))))
-  
-;;.duration (ts-difference (ts-now) (ts-parse .time_insert))
 
 (provide 'clockodo)
 ;;; clockodo.el ends here
