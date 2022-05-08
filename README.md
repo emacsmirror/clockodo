@@ -53,8 +53,8 @@ The package provides the following time reports:
 
   * `clockodo-print-daily-report`
   * `clockodo-print-weekly-report`
-  * `clockodo-print-monthly-report` (TODO)
-  * `clockodo-print-overall-report` (TODO)
+  * `clockodo-print-monthly-report`
+  * `clockodo-print-overall-report`
 
 Each report provides the quick bindings:
 
@@ -62,6 +62,12 @@ Each report provides the quick bindings:
   * `c` - choose report time
   * `n` - next report
   * `p` - previous report
+  
+Special bindings:
+
+  * `w` - jump to week from a daily report
+  * `m` - jump to month from daily or weekly buffer
+  * `y` - jump to year from daily, weekly or monthly buffer
 
 General requests which return raw results from the API can be triggered with
 the function `clockodo-show-information`.

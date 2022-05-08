@@ -62,12 +62,15 @@
 ;; + `clockodo-print-overall-overview' - Generates a report from the beginning of recording
 
 ;; Within the report buffers use \\[n] and \\[p] to view the previous or next buffer.
+;; With \\[g] refresh the buffer.
+;; In scoping order use \\[w], \\[m] and \\[y] to jump to the weekly, monthly or yearly reports.
 
 ;; To integrate the clockodo-timer run `clockodo-mode'.
 ;; This creates a background timer which prints to the modeline.
 
 ;; Afterwards, run one of these commands:
 ;; + `clockodo-toggle-clock': Start the default clockodo timer.
+;; + All commands are bound to the prefix \\[C-c C-#]
 
 ;; The mode-line updater and the clock can be used independently which
 ;; means one can enable the clock from another application and just show
@@ -1032,7 +1035,9 @@ to nil instead of really stopping the clock."
   :global t
   :keymap (list (cons (clockodo--key "t") #'clockodo-toggle-clock)
                 (cons (clockodo--key "d") #'clockodo-print-daily-overview)
-                (cons (clockodo--key "w") #'clockodo-print-weekly-overview))
+                (cons (clockodo--key "w") #'clockodo-print-weekly-overview)
+                (cons (clockodo--key "m") #'clockodo-print-monthly-overview)
+                (cons (clockodo--key "y") #'clockodo-print-yearly-overview))
   ;; Set mode-line mouse bindings
   (global-set-key [mode-line mouse-2] 'clockodo-toggle-clock)
   
