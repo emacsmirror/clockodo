@@ -142,12 +142,12 @@
   :type 'color
   :group 'clockodo)
 
-(defcustom clockodo-date-background ""
+(defcustom clockodo-date-background "thistle"
   "The background color used for dates in the report."
   :type 'color
   :group 'clockodo)
 
-(defcustom clockodo-date-foreground ""
+(defcustom clockodo-date-foreground "black"
   "The foreground color used for dates in the report."
   :type 'color
   :group 'clockodo)
@@ -235,8 +235,8 @@ DATE The timepoint which gets formated into a date with '%a %d.%m.%y' settings."
   (clockodo--with-face
    (ts-format "%a %d.%m.%y" date)
    :weight 'semi-bold
-   :background "thistle"
-   :foreground "black"))
+   :background clockodo-date-background
+   :foreground clockodo-date-foreground))
 
 (defun clockodo--color-summary ()
   "Get the 'summary' text with default colors.."
@@ -828,15 +828,14 @@ PREFIX Use the \\[universal-argument] to select the month."
   (interactive "P")
   (clockodo--print-weekly-overview (clockodo--user-input prefix)))
 
-(defun clockodo--format-monthly-entries (entries start-date end-date &optional reverse)
+(defun clockodo--format-monthly-entries (entries start-date end-date)
   "This function formats the entries into a monthly overview.
 The start and end date gets padded to whole weeks.
 
 ENTRIES The entries for the month to show.
 START-DATE The start date for the month.
-END-DATE The end date for the month.
-REVERSE The the month weeks in reverse order."
-  (let* ((start-week (clockodo--get-time-range (or (when reverse end-date) start-date) t))
+END-DATE The end date for the month."
+  (let* ((start-week (clockodo--get-time-range start-date t))
          (start (car start-week))
          (end (cdr start-week)))
     (insert "\n")
@@ -906,8 +905,7 @@ PREFIX Use the \\[universal-argument] to select the month."
 (defun clockodo--format-yearly-entries (entries start-date end-date &optional sparse)
   "This function formats the entries for a whole year into an overview.
 
-The overview is given in reverse order and capped at the last month of the
-year with at least one entry.
+The overview is given in reverse order.
 
 ENTRIES The entries of the year.
 START-DATE The starting date for the report.
@@ -918,21 +916,17 @@ END-DATE The ending date for the report.
     (cl-loop while (ts>= end start-date)
              do (let* ((monthly-entries (clockodo--filter-entries entries end 'ts-month))
                       (range (clockodo--get-time-range end nil t))
-                      (num-entries (length monthly-entries)))
+                      (header (concat (ts-format "%B %Y" end)
+                                      (format " Entries: %s\n" (length monthly-entries)))))
                   (if sparse
-                      (when (> num-entries 0)
+                      (when (> (length monthly-entries) 0)
                         (progn
-                          (insert (ts-format "%B %Y" end)
-                                  (format " Entries: %s" num-entries)
-                                  "\n")
+                          (insert header)
                           (clockodo--format-monthly-entries monthly-entries (car range) (cdr range))))
                     (progn
-                      (insert (ts-format "%B %Y" end)
-                                  (format " Entries: %s" num-entries)
-                                  "\n")
+                      (insert header)
                       (clockodo--format-monthly-entries monthly-entries (car range) (cdr range))))
                   (ts-decf (ts-month end))))))
-
 
 (defun clockodo--print-yearly-overview (time &optional sparse)
   "Print the weekly overview sheet.
@@ -958,12 +952,13 @@ SPARSE Set to non-nil to get only a sparse overview."
                     (clockodo--buffer-key "n" `(clockodo--print-yearly-overview (ts-inc 'year 1 ,time)))
                     (clockodo--format-yearly-entries
                      (alist-get 'entries data) (car time-range) (cdr time-range) sparse)))))
+    (message (format "%s" sparse))
     (clockodo--build-report-buffer "yearly" header fun)))
 
 (defun clockodo-print-yearly-overview (prefix)
   "Create a long overview report over the complete time.
 
-PREFIX Use the \\[unsiversal-argument] to get a sparse overview"
+PREFIX Use the \\[unsiversal-argument] to get a full overview"
   (interactive "P")
   (clockodo--print-yearly-overview (ts-now) (unless prefix t)))
 
@@ -979,6 +974,7 @@ the time duration since the clock was started in seconds."
          (data (request-response-data response)))
     (let-alist data
       (unless (null .running.id)
+
         (ts-human-format-duration
          (ts-difference (ts-now) (ts-parse .running.time_insert)) t)))))
 
