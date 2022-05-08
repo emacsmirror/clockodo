@@ -173,7 +173,7 @@ Only 7 days and 5 days are supported."
 
 ;; Mode and API variables
 
-(defvar clockodo-debug t
+(defvar clockodo-debug nil
   "Shows more information in the message buffer.")
 
 (defvar clockodo-user-id nil
