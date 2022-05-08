@@ -167,7 +167,7 @@ Only 7 days and 5 days are supported."
   :group 'clockodo)
 
 (defcustom clockodo-update-interval 60
-  "The update interval in seconds used for query the clockodo clock if it is running."
+  "The update interval for querying the clockodo clock."
   :type 'number
   :group 'clockodo)
 
@@ -186,7 +186,7 @@ Only 7 days and 5 days are supported."
   "The default customer id defined by the company.")
 
 (defvar clockodo-timer-id nil
-  "The timer object id which is used for interaction with the clockodo api `/v2/clock'.")
+  "The timer id used for interacting with the clockodo api `/v2/clock'.")
 
 (defvar clockodo-timer nil
   "The internal timer object used to update the display-mode.")
@@ -363,7 +363,7 @@ API-CREDS The credentials for the clockodo api."
               clockodo-default-customer-id .company.default_customers_id)))))
 
 (defun clockodo-get-credentials ()
-  "A small wrapper which takes long-time storing of credentials into account.
+  "A wrapper which takes long-time storing of credentials into account.
 
 It knocks the clockodo api to test if the credentials are valid before storing them."
   (let ((api-credentials (clockodo--get-credentials)))
@@ -575,7 +575,7 @@ TOKEN The clockodo api token for the user.
 &CUSTOMER-ID This the information about a single customer instead of all."
   (clockodo--get-request user token
                          (concat "/customers"
-                                 (unless (null costomer-id)
+                                 (unless (null customer-id)
                                    (format "/%s" customer-id)))))
 
 (defun clockodo--get-abscence (user token &optional year all abscence-id)
@@ -757,12 +757,11 @@ PREFIX Use the \\[universal-argument] to select the day."
   (interactive "P")
   (clockodo--print-daily-overview (clockodo--user-input prefix)))
 
-(defun clockodo--format-weekly-entries (entries start-day end-day)
+(defun clockodo--format-weekly-entries (entries start-day)
   "Generate the entries for the weekly report.
 
 ENTRIES The alist data to format.
-START-DAY The beginning of the week.
-END-DAY The end of the week."
+START-DAY The beginning of the week."
   (let* ((p (point))
          (days (mapcar
                 #'(lambda (days)
@@ -821,7 +820,7 @@ TIME The day from which the week gets calculated for the weekly report."
                     (clockodo--buffer-key "n" `(clockodo--print-weekly-overview (ts-inc 'day 7 ,time)))
                     (clockodo--buffer-key "m" `(clockodo--print-monthly-overview ,time))
                     (clockodo--buffer-key "y" `(clockodo--print-yearly-overview ,time))
-                    (clockodo--format-weekly-entries (alist-get 'entries data) (car time-range) (cdr time-range))))))
+                    (clockodo--format-weekly-entries (alist-get 'entries data) (car time-range))))))
     (clockodo--build-report-buffer "weekly" header fun)))
 
 (defun clockodo-print-weekly-overview (prefix)
@@ -1065,7 +1064,7 @@ to nil instead of really stopping the clock."
      (progn
        (message "Disable clockodo mode")
        (unless (null clockodo-timer-id)
-         (clockodo--stop-clock))
+         (clockodo-stop-clock))
        (unless (null clockodo-timer)
          (cancel-timer clockodo-timer))
        (setq clockodo-display-string ""
