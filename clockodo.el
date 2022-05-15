@@ -1040,8 +1040,6 @@ to nil instead of really stopping the clock."
                 (cons (clockodo--key "w") #'clockodo-print-weekly-overview)
                 (cons (clockodo--key "m") #'clockodo-print-monthly-overview)
                 (cons (clockodo--key "y") #'clockodo-print-yearly-overview))
-  ;; Set mode-line mouse bindings
-  (global-set-key [mode-line mouse-2] 'clockodo-toggle-clock)
   
   ;; Set the empty mode-line
   (let ((clock (format "%sclock%s" (car clockodo-mode-line-pair) (cdr clockodo-mode-line-pair))))
