@@ -315,7 +315,7 @@ SECS The soconds to convert into HH:mm:ss"
   "Query the user for some input time or return the current time.
 
 USER Set to non-nil to ask the user for a time point."
-  (or (unless (null user)
+  (or (when user
        (ts-parse-org (org-read-date)))
      (ts-now)))
 
@@ -558,7 +558,7 @@ TOKEN The clockodo api token.
 &YEAR Specify the year you want the free days for."
   (clockodo--get-request user token
                          (concat "/nonbusinessgroups"
-                                 (unless (null group-id)
+                                 (when group-id
                                    (format "?nonbusinessgroups_id=%s&year=%s"
                                            group-id
                                            (or year (ts-year (ts-now))))))))
@@ -578,7 +578,7 @@ TOKEN The clockodo api token for the user.
 &CUSTOMER-ID This the information about a single customer instead of all."
   (clockodo--get-request user token
                          (concat "/customers"
-                                 (unless (null customer-id)
+                                 (when customer-id
                                    (format "/%s" customer-id)))))
 
 (defun clockodo--get-abscence (user token &optional year all abscence-id)
@@ -978,7 +978,7 @@ the time duration since the clock was started in seconds."
          (response (clockodo--get-clock (nth 0 creds) (nth 1 creds)))
          (data (request-response-data response)))
     (let-alist data
-      (unless (null .running.id)
+      (when .running.id
 
         (ts-human-format-duration
          (ts-difference (ts-now) (ts-parse .running.time_insert)) t)))))
@@ -1066,9 +1066,9 @@ to nil instead of really stopping the clock."
                                     (setq clockodo-display-string clock)))))))
      (progn
        (message "Disable clockodo mode")
-       (unless (null clockodo-timer-id)
+       (when clockodo-timer-id
          (clockodo-stop-clock))
-       (unless (null clockodo-timer)
+       (when clockodo-timer
          (cancel-timer clockodo-timer))
        (setq clockodo-display-string ""
              clockodo-timer nil)))))
