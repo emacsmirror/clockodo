@@ -325,9 +325,9 @@ USER Set to non-nil to ask the user for a time point."
 ENTRIES The entries to filter.
 TIME The time reference.
 SLOT The time slot to compare with the `time_since' API return."
-  (seq-filter #'(lambda (e)
-                  (= (funcall slot time)
-                     (funcall slot (ts-parse (alist-get 'time_since e)))))
+  (seq-filter (lambda (e)
+                (= (funcall slot time)
+                   (funcall slot (ts-parse (alist-get 'time_since e)))))
               entries))
 
 ;; Handle credentials
@@ -695,20 +695,20 @@ List (start_time1 duration1 end_time1) (next_entries) sum_time
 
 ENTRIES A alist of time entries.
 ABBREV Show times in short form. If non-nil use short forms."
-  (seq-map #'(lambda (e)
-               (let-alist e
-                 (list
-                  (clockodo--with-face
-                   (ts-format "%T" (ts-parse .time_insert))
-                   :underline t)
-                  (clockodo--color-time (clockodo--sum-duration 0 e) 0 abbrev)
-                  (clockodo--with-face
-                   (format "(%s)" .services_name)
-                   :foreground clockodo-plus-color)
-                  (clockodo--with-face
-                   (or (when (null .time_until) "Running")
-                      (ts-format "%T" (ts-parse .time_until)))
-                   :underline t))))
+  (seq-map (lambda (e)
+             (let-alist e
+               (list
+                (clockodo--with-face
+                 (ts-format "%T" (ts-parse .time_insert))
+                 :underline t)
+                (clockodo--color-time (clockodo--sum-duration 0 e) 0 abbrev)
+                (clockodo--with-face
+                 (format "(%s)" .services_name)
+                 :foreground clockodo-plus-color)
+                (clockodo--with-face
+                 (or (when (null .time_until) "Running")
+                    (ts-format "%T" (ts-parse .time_until)))
+                 :underline t))))
            entries))
 
 (defun clockodo--print-daily-overview (time)
@@ -727,30 +727,30 @@ TIME The day for which the report should be genereated."
                   "Daily" (ts-format "%F" time)
                   (nth 0 creds) (nth 1 creds)
                   (alist-get 'count_items (alist-get 'paging data))))
-         (fun #'(lambda ()
-                  (let-alist data
-                    (progn
-                      (clockodo--buffer-key "g" '(clockodo-print-daily-overview nil))
-                      (clockodo--buffer-key "c" '(clockodo-print-daily-overview t))
-                      (clockodo--buffer-key "p" `(clockodo--print-daily-overview (ts-dec 'day 1 ,time)))
-                      (clockodo--buffer-key "n" `(clockodo--print-daily-overview (ts-inc 'day 1 ,time)))
-                      (clockodo--buffer-key "w" `(clockodo--print-weekly-overview ,time))
-                      (clockodo--buffer-key "m" `(clockodo--print-monthly-overview ,time))
-                      (clockodo--buffer-key "y" `(clockodo--print-yearly-overview ,time))
-                      (let ((entries (clockodo--daily-entries-as-list .entries))
-                            (sum (seq-reduce #'clockodo--sum-duration .entries 0)))
-                        (if (not entries)
-                            (progn
-                              (seq-do #'(lambda (e)
-                                          (insert (string-join e "\n") "\n\n"))
-                                      entries)
-                              (insert (format "Summery: %s / %s hours"
-                                              (clockodo--color-time  sum)
-                                              clockodo-max-work-hours)))
-                          (insert (clockodo--with-face
-                                   "No time entries today."
-                                   :weight 'semi-bold
-                                   :underline t)))))))))
+         (fun (lambda ()
+                (let-alist data
+                  (progn
+                    (clockodo--buffer-key "g" '(clockodo-print-daily-overview nil))
+                    (clockodo--buffer-key "c" '(clockodo-print-daily-overview t))
+                    (clockodo--buffer-key "p" `(clockodo--print-daily-overview (ts-dec 'day 1 ,time)))
+                    (clockodo--buffer-key "n" `(clockodo--print-daily-overview (ts-inc 'day 1 ,time)))
+                    (clockodo--buffer-key "w" `(clockodo--print-weekly-overview ,time))
+                    (clockodo--buffer-key "m" `(clockodo--print-monthly-overview ,time))
+                    (clockodo--buffer-key "y" `(clockodo--print-yearly-overview ,time))
+                    (let ((entries (clockodo--daily-entries-as-list .entries))
+                          (sum (seq-reduce #'clockodo--sum-duration .entries 0)))
+                      (if (not entries)
+                          (progn
+                            (seq-do (lambda (e)
+                                      (insert (string-join e "\n") "\n\n"))
+                                    entries)
+                            (insert (format "Summery: %s / %s hours"
+                                            (clockodo--color-time  sum)
+                                            clockodo-max-work-hours)))
+                        (insert (clockodo--with-face
+                                 "No time entries today."
+                                 :weight 'semi-bold
+                                 :underline t)))))))))
     (clockodo--build-report-buffer "daily" header fun)))
 
 (defun clockodo-print-daily-overview (prefix)
@@ -767,28 +767,27 @@ ENTRIES The alist data to format.
 START-DAY The beginning of the week."
   (let* ((p (point))
          (days (mapcar
-                #'(lambda (days)
-                    (let* ((time (ts-adjust 'day days start-day))
-                           (filtered-entries (clockodo--filter-entries entries time 'ts-dow)))
-                      (list :entries (clockodo--daily-entries-as-list filtered-entries t)
-                            :day (clockodo--color-date time)
-                            :sum (seq-reduce #'clockodo--sum-duration filtered-entries 0))))
+                (lambda (days)
+                  (let* ((time (ts-adjust 'day days start-day))
+                         (filtered-entries (clockodo--filter-entries entries time 'ts-dow)))
+                    (list :entries (clockodo--daily-entries-as-list filtered-entries t)
+                          :day (clockodo--color-date time)
+                          :sum (seq-reduce #'clockodo--sum-duration filtered-entries 0))))
                 (number-sequence 0 (1- clockodo-work-days-a-week))))
-         (leng (seq-max (mapcar #'(lambda (e) (length (plist-get e :entries))) days)))
-         (entries (seq-map #'(lambda (e) (plist-get e :entries)) days))
+         (leng (seq-max (mapcar (lambda (e) (length (plist-get e :entries))) days)))
+         (entries (seq-map (lambda (e) (plist-get e :entries)) days))
          (sums
-          (seq-map
-                #'(lambda (e)
-                    (format "%s / %s hours" (clockodo--color-time (plist-get e :sum) nil t)
-                            clockodo-max-work-hours))
-                days)))
-    (insert (mapconcat #'identity (seq-map #'(lambda (e) (plist-get e :day)) days) ",") "\n")
+          (seq-map (lambda (e)
+                     (format "%s / %s hours" (clockodo--color-time (plist-get e :sum) nil t)
+                             clockodo-max-work-hours))
+                   days)))
+    (insert (mapconcat #'identity (seq-map (lambda (e) (plist-get e :day)) days) ",") "\n")
     (cl-loop for i from 0 to (1- leng) do
              (cl-loop for j from 0 to 4 do
                       (insert
                        (string-remove-suffix ","
                         (string-join
-                         (seq-map #'(lambda (e) (concat (nth j (nth i e)) ",")) entries) ""))
+                         (seq-map (lambda (e) (concat (nth j (nth i e)) ",")) entries) ""))
                        "\n")))
     (insert (mapconcat #'identity sums ","))
     (org-table-convert-region p (point))
@@ -797,7 +796,7 @@ START-DAY The beginning of the week."
     (goto-char (point-max))
     (insert "\n" (clockodo--color-summary) " "
             (ts-human-format-duration
-             (apply #'+ (seq-map #'(lambda (e) (plist-get e :sum)) days))))))
+             (apply #'+ (seq-map (lambda (e) (plist-get e :sum)) days))))))
 
 (defun clockodo--print-weekly-overview (time)
   "Print the weekly overview sheet.
@@ -815,15 +814,15 @@ TIME The day from which the week gets calculated for the weekly report."
                   "Weekly" (ts-format "%+4Y-%m Week %W" time)
                   (nth 0 creds) (nth 1 creds)
                   (alist-get 'count_items (alist-get 'paging data))))
-         (fun #'(lambda ()
-                  (progn
-                    (clockodo--buffer-key "g" '(clockodo-print-weekly-overview nil))
-                    (clockodo--buffer-key "c" '(clockodo-print-weekly-overview t))
-                    (clockodo--buffer-key "p" `(clockodo--print-weekly-overview (ts-dec 'day 7 ,time)))
-                    (clockodo--buffer-key "n" `(clockodo--print-weekly-overview (ts-inc 'day 7 ,time)))
-                    (clockodo--buffer-key "m" `(clockodo--print-monthly-overview ,time))
-                    (clockodo--buffer-key "y" `(clockodo--print-yearly-overview ,time))
-                    (clockodo--format-weekly-entries (alist-get 'entries data) (car time-range))))))
+         (fun (lambda ()
+                (progn
+                  (clockodo--buffer-key "g" '(clockodo-print-weekly-overview nil))
+                  (clockodo--buffer-key "c" '(clockodo-print-weekly-overview t))
+                  (clockodo--buffer-key "p" `(clockodo--print-weekly-overview (ts-dec 'day 7 ,time)))
+                  (clockodo--buffer-key "n" `(clockodo--print-weekly-overview (ts-inc 'day 7 ,time)))
+                  (clockodo--buffer-key "m" `(clockodo--print-monthly-overview ,time))
+                  (clockodo--buffer-key "y" `(clockodo--print-yearly-overview ,time))
+                  (clockodo--format-weekly-entries (alist-get 'entries data) (car time-range))))))
     (clockodo--build-report-buffer "weekly" header fun)))
 
 (defun clockodo-print-weekly-overview (prefix)
@@ -890,14 +889,14 @@ TIME The day for which the report should be genereated."
                   "Monthly" (ts-format "%+4Y-%m" time)
                   (nth 0 creds) (nth 1 creds)
                   (alist-get 'count_items (alist-get 'paging data))))
-         (fun #'(lambda ()
-                  (progn
-                    (clockodo--buffer-key "g" '(clockodo-print-monthly-overview nil))
-                    (clockodo--buffer-key "c" '(clockodo-print-monthly-overview t))
-                    (clockodo--buffer-key "p" `(clockodo--print-monthly-overview (ts-dec 'month 1 ,time)))
-                    (clockodo--buffer-key "n" `(clockodo--print-monthly-overview (ts-inc 'month 1 ,time)))
-                    (clockodo--buffer-key "y" `(clockodo--print-yearly-overview ,time))
-                    (clockodo--format-monthly-entries (alist-get 'entries data) (car time-range) (cdr time-range))))))
+         (fun (lambda ()
+                (progn
+                  (clockodo--buffer-key "g" '(clockodo-print-monthly-overview nil))
+                  (clockodo--buffer-key "c" '(clockodo-print-monthly-overview t))
+                  (clockodo--buffer-key "p" `(clockodo--print-monthly-overview (ts-dec 'month 1 ,time)))
+                  (clockodo--buffer-key "n" `(clockodo--print-monthly-overview (ts-inc 'month 1 ,time)))
+                  (clockodo--buffer-key "y" `(clockodo--print-yearly-overview ,time))
+                  (clockodo--format-monthly-entries (alist-get 'entries data) (car time-range) (cdr time-range))))))
     (clockodo--build-report-buffer "monthly" header fun)))
 
 (defun clockodo-print-monthly-overview (prefix)
@@ -950,13 +949,13 @@ SPARSE Set to non-nil to get only a sparse overview."
                   "Overall" (ts-format "%+4Y" time)
                   (nth 0 creds) (nth 1 creds)
                   (alist-get 'count_items (alist-get 'paging data))))
-         (fun #'(lambda ()
-                  (progn
-                    (clockodo--buffer-key "g" '(clockodo-print-yearly-overview nil))
-                    (clockodo--buffer-key "p" `(clockodo--print-yearly-overview (ts-dec 'year 1 ,time)))
-                    (clockodo--buffer-key "n" `(clockodo--print-yearly-overview (ts-inc 'year 1 ,time)))
-                    (clockodo--format-yearly-entries
-                     (alist-get 'entries data) (car time-range) (cdr time-range) sparse)))))
+         (fun (lambda ()
+                (progn
+                  (clockodo--buffer-key "g" '(clockodo-print-yearly-overview nil))
+                  (clockodo--buffer-key "p" `(clockodo--print-yearly-overview (ts-dec 'year 1 ,time)))
+                  (clockodo--buffer-key "n" `(clockodo--print-yearly-overview (ts-inc 'year 1 ,time)))
+                  (clockodo--format-yearly-entries
+                   (alist-get 'entries data) (car time-range) (cdr time-range) sparse)))))
     (message "%s" sparse)
     (clockodo--build-report-buffer "yearly" header fun)))
 
@@ -1053,15 +1052,15 @@ to nil instead of really stopping the clock."
 		              (append global-mode-string '(clockodo-display-string))))
          (setq clockodo-timer
                (run-with-timer 0 clockodo-update-interval
-                            #'(lambda ()
-                                (let ((time (clockodo-get-clock)))
-                                  (if (not time)
-                                      (setq clockodo-display-string
-                                            (format "%s%s%s"
-                                                    (car clockodo-mode-line-pair)
-                                                    time
-                                                    (cdr clockodo-mode-line-pair)))
-                                    (setq clockodo-display-string clock)))))))
+                            (lambda ()
+                              (let ((time (clockodo-get-clock)))
+                                (if (not time)
+                                    (setq clockodo-display-string
+                                          (format "%s%s%s"
+                                                  (car clockodo-mode-line-pair)
+                                                  time
+                                                  (cdr clockodo-mode-line-pair)))
+                                  (setq clockodo-display-string clock)))))))
      (progn
        (message "Disable clockodo mode")
        (when clockodo-timer-id
