@@ -191,6 +191,9 @@ Only 7 days and 5 days are supported."
 (defvar clockodo-timer nil
   "The internal timer object used to update the display-mode.")
 
+(defvar clockodo-display-string nil
+  "The display string shown in the modeline.")
+
 ;; Helper functions
 
 (defun clockodo--key (key)
@@ -232,7 +235,7 @@ TIME The time to show with a colored face.
      clockodo-minus-color)))
 
 (defun clockodo--color-date (date)
-  "Apply the `clockodo-date-foreground' and `clockodo-date-background' to a date.
+  "Apply `clockodo-date-foreground' and `clockodo-date-background' to a date.
 
 DATE The timepoint which gets formated into a date with '%a %d.%m.%y' settings."
   (clockodo--with-face
