@@ -739,7 +739,7 @@ TIME The day for which the report should be genereated."
                       (clockodo--buffer-key "y" `(clockodo--print-yearly-overview ,time))
                       (let ((entries (clockodo--daily-entries-as-list .entries))
                             (sum (seq-reduce #'clockodo--sum-duration .entries 0)))
-                        (if (not (null entries))
+                        (if (not entries)
                             (progn
                               (seq-do #'(lambda (e)
                                           (insert (string-join e "\n") "\n\n"))
@@ -844,7 +844,7 @@ END-DATE The end date for the month."
          (start (car start-week))
          (end (cdr start-week)))
     (insert "\n")
-    ; start from the first week where the first day maybe in the last month
+    ;; start from the first week where the first day maybe in the last month
     (cl-loop while (ts<= start end-date)
              do (cl-loop while (ts<= start end)
                          do (let* ((day-entries
@@ -957,7 +957,7 @@ SPARSE Set to non-nil to get only a sparse overview."
                     (clockodo--buffer-key "n" `(clockodo--print-yearly-overview (ts-inc 'year 1 ,time)))
                     (clockodo--format-yearly-entries
                      (alist-get 'entries data) (car time-range) (cdr time-range) sparse)))))
-    (message (format "%s" sparse))
+    (message "%s" sparse)
     (clockodo--build-report-buffer "yearly" header fun)))
 
 (defun clockodo-print-yearly-overview (prefix)
@@ -997,10 +997,10 @@ for being able to stop the clock later."
                  (post-data (request-response-data post-resp)))
             (let-alist post-data
               (setq clockodo-timer-id .running.id)
-              (message (format "Started clock at %s" (ts-format "%T" (ts-parse .running.time_since))))))
+              (message "Started clock at %s" (ts-format "%T" (ts-parse .running.time_since)))))
         (progn
           (setq clockodo-timer-id .running.id)
-          (message (format "Clock already started at %s" (ts-format "%T" (ts-parse .running.time_since)))))))))
+          (message "Clock already started at %s" (ts-format "%T" (ts-parse .running.time_since))))))))
 
 (defun clockodo-stop-clock ()
   "Stop the clockodo clock service.
@@ -1011,12 +1011,12 @@ to nil instead of really stopping the clock."
          (response (clockodo--get-clock (nth 0 creds) (nth 1 creds)))
          (data (request-response-data response)))
     (let-alist data
-      (if (and clockodo-timer-id (not (null .running.id)))
+      (if (and clockodo-timer-id (not .running.id))
           (let* ((del-resp (clockodo--stop-clock (nth 0 creds) (nth 1 creds)))
                  (del-data (request-response-data del-resp)))
             (let-alist del-data
              (setq clockodo-timer-id nil)
-             (message (format "Stopped clock at %s" (ts-format "%T" (ts-parse .stopped.time_until))))))
+             (message "Stopped clock at %s" (ts-format "%T" (ts-parse .stopped.time_until)))))
         (progn
           (setq clockodo-timer-id nil)
           (message "Clock already stopped"))))))
@@ -1057,7 +1057,7 @@ to nil instead of really stopping the clock."
                (run-with-timer 0 clockodo-update-interval
                             #'(lambda ()
                                 (let ((time (clockodo-get-clock)))
-                                  (if (not (null time))
+                                  (if (not time)
                                       (setq clockodo-display-string
                                             (format "%s%s%s"
                                                     (car clockodo-mode-line-pair)
