@@ -739,7 +739,7 @@ TIME The day for which the report should be genereated."
                     (clockodo--buffer-key "y" `(clockodo--print-yearly-overview ,time))
                     (let ((entries (clockodo--daily-entries-as-list .entries))
                           (sum (seq-reduce #'clockodo--sum-duration .entries 0)))
-                      (if (not entries)
+                      (if entries
                           (progn
                             (seq-do (lambda (e)
                                       (insert (string-join e "\n") "\n\n"))
@@ -978,7 +978,6 @@ the time duration since the clock was started in seconds."
          (data (request-response-data response)))
     (let-alist data
       (when .running.id
-
         (ts-human-format-duration
          (ts-difference (ts-now) (ts-parse .running.time_insert)) t)))))
 
@@ -1010,7 +1009,7 @@ to nil instead of really stopping the clock."
          (response (clockodo--get-clock (nth 0 creds) (nth 1 creds)))
          (data (request-response-data response)))
     (let-alist data
-      (if (and clockodo-timer-id (not .running.id))
+      (if (and clockodo-timer-id .running.id)
           (let* ((del-resp (clockodo--stop-clock (nth 0 creds) (nth 1 creds)))
                  (del-data (request-response-data del-resp)))
             (let-alist del-data
@@ -1054,7 +1053,7 @@ to nil instead of really stopping the clock."
                (run-with-timer 0 clockodo-update-interval
                             (lambda ()
                               (let ((time (clockodo-get-clock)))
-                                (if (not time)
+                                (if time
                                     (setq clockodo-display-string
                                           (format "%s%s%s"
                                                   (car clockodo-mode-line-pair)
