@@ -72,6 +72,17 @@ Special bindings:
 General requests which return raw results from the API can be triggered with
 the function `clockodo-show-information`.
 
+### TODOS
+
+This package models only the employee view and only the points necessary for me.
+There are many more open tasks which can be nicely integrated into this package.
+Feel free to open an issue with a missing point or a pull-requests with the code.
+
+- [ ] Define the default customer or let the user choose the customer for time track
+- [ ] Modify time tracks
+- [ ] Show abscene as report
+- [ ] Use `thing-at-point` to switch between reports
+
 ## Contribution
 
 Feel free to contribute to this project. Pull requests with code improvements,
