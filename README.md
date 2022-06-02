@@ -47,6 +47,14 @@ To active or deactivate the clock use `M-x clockodo-toggle-clock`.
 On activation this either starts the clock or gets the current running id.  
 On deactivation this only stops the clock if it's currently running.
 
+### Configuration
+
+This mode can be configured through the `customize` feature of emacs.
+It includes changing faces and colors and other minor adjustments.
+
+- Set your own default service id (which exists in clockodo) through `clockodo-service-id` 
+instead of using the company defined one.
+
 ### Reports
 
 The package provides the following time reports:
@@ -78,10 +86,11 @@ This package models only the employee view and only the points necessary for me.
 There are many more open tasks which can be nicely integrated into this package.
 Feel free to open an issue with a missing point or a pull-requests with the code.
 
-- [ ] Define the default customer or let the user choose the customer for time track
+- [ ] ~~Define the default customer~~ or let the user choose the customer for time track
 - [ ] Modify time tracks
 - [ ] Show abscene as report
 - [ ] Use `thing-at-point` to switch between reports
+- [ ] Better error handling
 
 ## Contribution
 
