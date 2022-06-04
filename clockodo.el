@@ -988,15 +988,31 @@ the time duration since the clock was started in seconds."
         (ts-human-format-duration
          (ts-difference (ts-now) (ts-parse .running.time_insert)) t)))))
 
-(defun clockodo-start-clock ()
+(defun clockodo--select-service (user token)
+  ""
+  (let* ((response (clockodo--get-all-services user token)))
+    (let-alist (request-response-data response)
+      (seq-map (lambda (e) (concat (number-to-string (cdr (nth 0 e))) " " (cdr (nth 1 e))))
+               (seq-filter (lambda (e) (not (eq (cdr (nth 3 e)) :json-false))) .services)))))
+
+(defun clockodo-start-clock (&optional user-choose)
   "Start the clockodo clock service.
 
 If the clock is already started the function sets the current id
-for being able to stop the clock later."
+for being able to stop the clock later.
+
+USER-CHOOSE Set to non-nil if the user should choose the service-id."
   (let* ((creds (clockodo-get-credentials))
          (response (clockodo--get-clock (nth 0 creds) (nth 1 creds)))
          (data (request-response-data response))
-         (service-id (or clockodo-service-id clockodo-default-service-id)))
+         (user-selection (when user-choose
+                           (completing-read "Select a service: "
+                                            (clockodo--select-service (nth 0 creds) (nth 1 creds)))))
+         ;(user-selection (completing-read "Select a service: " services))
+         (user-selection (when user-selection (progn (nth 0 (split-string user-selection " ")))))
+         (service-id (or user-selection
+                      clockodo-service-id
+                      clockodo-default-service-id)))
     (let-alist data
       (if (null .running.id)
           (let* ((post-resp (clockodo--start-clock (nth 0 creds) (nth 1 creds) service-id))
@@ -1027,12 +1043,14 @@ to nil instead of really stopping the clock."
           (setq clockodo-timer-id nil)
           (message "Clock already stopped"))))))
 
-(defun clockodo-toggle-clock ()
-  "Toggle the state of the clockodo clock service."
-  (interactive)
+(defun clockodo-toggle-clock (prefix)
+  "Toggle the state of the clockodo clock service.
+
+PREFIX If the user wants to choose the service-id."
+  (interactive "P")
   (if clockodo-timer-id
-      (clockodo-stop-clock)
-    (clockodo-start-clock)))
+        (clockodo-stop-clock)
+    (clockodo-start-clock (when prefix t))))
 
 ;;;###autoload
 (define-minor-mode clockodo-mode

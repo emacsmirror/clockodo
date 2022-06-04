@@ -33,6 +33,8 @@ Afterwards, run `(require clockodo)` to make it available.
 
 Use `M-x customize-group RET clockodo` to see all customization options.
 
+As credentials provide the user email and the api token which is located under `my data`.
+
 ### Minor mode
 
 To enable the minor mode use `M-x clockodo-mode` this enables the background timer
@@ -46,11 +48,13 @@ When the minor mode is enabled the keys are bound to the prefix `C-c C-#`.
 To active or deactivate the clock use `M-x clockodo-toggle-clock`.  
 On activation this either starts the clock or gets the current running id.  
 On deactivation this only stops the clock if it's currently running.
+To select from the active services provided by the company use the prefix key
+(`C-u`) before starting the clock.
 
 ### Configuration
 
 This mode can be configured through the `customize` feature of emacs.
-It includes changing faces and colors and other minor adjustments.
+It includes changing faces, colors and other minor adjustments.
 
 - Set your own default service id (which exists in clockodo) through `clockodo-service-id` 
 instead of using the company defined one.
@@ -91,6 +95,7 @@ Feel free to open an issue with a missing point or a pull-requests with the code
 - [ ] Show abscene as report
 - [ ] Use `thing-at-point` to switch between reports
 - [ ] Better error handling
+- [ ] Show abscene in reports
 
 ## Contribution
 
