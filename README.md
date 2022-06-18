@@ -7,9 +7,11 @@ On the other hand, it provides a bunch of commands to generate reports or show r
 from the API. This is mostly written from the employee perspective and mostly uses reading 
 requests to interact with the service. To change time information uses the webpage, at the moment. 
 
+I wrote a little sum up [here](https://rtzptz.xyz/posts/emacs-package-development/).
+
 ## Installation
 
-### Melpa (TODO)
+### Melpa
 
 The simplest way is to install the package directly from melpa with
 `package-install RET clockodo RET`. 
@@ -90,7 +92,7 @@ This package models only the employee view and only the points necessary for me.
 There are many more open tasks which can be nicely integrated into this package.
 Feel free to open an issue with a missing point or a pull-requests with the code.
 
-- [ ] ~~Define the default customer~~ or let the user choose the customer for time track
+- [x] Define the default customer or let the user choose the customer for time track
 - [ ] Modify time tracks
 - [ ] Show abscene as report
 - [ ] Use `thing-at-point` to switch between reports
