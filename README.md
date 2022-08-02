@@ -1,5 +1,7 @@
 # clockodo-el
 
+[![MELPA](https://melpa.org/packages/clockodo-badge.svg)](https://melpa.org/#/clockodo)
+
 This emacs package provides a basic integration of the [clockodo](https://clockodo.com/)
 service. It provides two ways to interact with the API. On the one hand, it provides
 a basic minor-mode to see the current clock state and a command to interact with the clock.
